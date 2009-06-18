@@ -7,7 +7,7 @@
 (in-package :cl-partial-eval-test)
 
 ;;;;;;
-;;; Compare
+;;; Loop based compare
 
 (declaim (inline compare))
 
@@ -71,8 +71,6 @@ the compare function's body expands into this:
   (is (equal (partial-eval '(lambda (text-2)
                               (compare "he" text-2)))
              '(lambda (text-2)
-                (declare (optimize (speed 3) (safety 0) (debug 0))
-                         (type simple-string text))
                 (if (= 2 (length text-2))
                     (block nil
                       (if (char= #\h (aref text-2 0))
@@ -82,6 +80,23 @@ the compare function's body expands into this:
                           nil
                           (return-from nil nil))
                       (return-from nil t)))))))
+
+;;;;;;
+;;; Recursion based compare
+
+(def function-with-source compare* (text-1 text-2)
+  "A simple text comparison."
+  (bind ((l (length text-1))
+         (i 0))
+    (labels ((%compare (text-1 text-2)
+               (if (= l i)
+                   t
+                   (when (char= (aref text-1 i)
+                                (aref text-2 i))
+                     (incf i)
+                     (%compare text-1 text-2)))))
+      (and (= l (length text-2))
+           (%compare text-1 text-2)))))
 
 ;;;;;;
 ;;; Append*
@@ -105,6 +120,29 @@ the compare function's body expands into this:
                               (append* '(1 2 3) list)))
              '(lambda (list)
                 (cons 1 (cons 2 (cons 3 list)))))))
+
+;;;;;;
+;;; Power
+
+(declaim (inline power))
+
+(def function-with-source power (base exponent)
+  "The usual power function"
+  (loop with result = 1
+     repeat exponent
+     do (setf result (* base result))
+     finally (return result)))
+
+(def test test/power/inline ()
+  (disassemble '(lambda (base)
+                  (declare (optimize (speed 3) (debug 0) (safety 0)))
+                  (power base 4))))
+
+(def test test/power/partial-eval ()
+  (is (equal (partial-eval '(lambda (base)
+                              (power base 4)))
+             '(lambda (base)
+                (* base (* base (* base (* base 1))))))))
 
 ;;;;;;
 ;;; Match

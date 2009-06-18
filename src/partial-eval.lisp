@@ -222,9 +222,6 @@
            ast)
   #f)
 
-(def function go-tag-referenced? (name ast)
-  #f)
-
 ;;;;;;
 ;;; Partial eval
 
@@ -300,7 +297,7 @@ the same side effects and the same non local return.
                   (eq non-local-exit (first all-non-local-exits))
                   (typep non-local-exit 'return-from-form)
                   (eq ast (target-block-of non-local-exit)))
-             (result-of non-local-exit))
+             (partial-eval (result-of non-local-exit)))
             ((block-referenced? ast evaluated-body)
              (make-instance 'block-form
                             :name (name-of ast)
