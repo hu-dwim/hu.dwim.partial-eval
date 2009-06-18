@@ -40,7 +40,8 @@
                :cl-def
                :cl-syntax-sugar
                :cl-walker
-               :cl-yalog)
+               :cl-yalog
+               #+nil :cl-unification)
   :components
   ((:module "src"
             :components

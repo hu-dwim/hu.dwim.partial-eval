@@ -14,11 +14,15 @@
         :iterate
         :defclass-star
         :closer-mop
+        #+nil :unify
         :cl-def
         :cl-syntax-sugar
         :cl-walker
         :cl-yalog
-        :cl-partial-eval-system))
+        :cl-partial-eval-system)
+
+  (:shadow #:environment
+           #:make-empty-environment))
 
 (in-package :cl-partial-eval)
 
