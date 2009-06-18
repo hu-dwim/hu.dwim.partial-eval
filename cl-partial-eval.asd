@@ -39,7 +39,8 @@
                :closer-mop
                :cl-def
                :cl-syntax-sugar
-               :cl-walker)
+               :cl-walker
+               :cl-yalog)
   :components
   ((:module "src"
             :components
