@@ -36,6 +36,7 @@
                :anaphora
                :iterate
                :defclass-star
+               :swank
                :closer-mop
                :cl-def
                :cl-syntax-sugar
@@ -44,11 +45,16 @@
                #+nil :cl-unification)
   :components
   ((:module "src"
-            :components
-            ((:file "package")
-             (:file "duplicates" :depends-on ("package"))
-             (:file "configuration" :depends-on ("duplicates"))
-             (:file "partial-eval" :depends-on ("configuration"))))))
+    :components ((:file "package")
+                 (:file "duplicates" :depends-on ("package"))
+                 (:file "configuration" :depends-on ("duplicates"))
+                 (:module "informatimago"
+                  :components ((:file "source-form")
+                               (:file "reader" :depends-on ("source-form"))
+                               (:file "source-text" :depends-on ("reader"))))
+                 
+                 (:file "source" :depends-on ("configuration" "informatimago"))
+                 (:file "partial-eval" :depends-on ("source"))))))
 
 (defmethod perform ((op test-op) (system (eql (find-system :cl-partial-eval))))
   (operate 'load-op :cl-partial-eval-test)

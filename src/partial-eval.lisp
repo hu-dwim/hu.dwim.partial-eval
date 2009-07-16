@@ -7,22 +7,6 @@
 (in-package :cl-partial-eval)
 
 ;;;;;;
-;;; Function with source
-
-(def (definer e) function-with-source (name args documentation &body forms)
-  `(progn
-     (setf (function-source ',name) `(lambda ,',args ,',@forms))
-     (def function ,name ,args ,documentation ,@forms)))
-
-(def special-variable *function-sources* (make-hash-table))
-
-(def function function-source (name)
-  (gethash name *function-sources*))
-
-(def function (setf function-source) (form name)
-  (setf (gethash name *function-sources*) form))
-
-;;;;;;
 ;;; Environment
 
 (def special-variable *environment*)
@@ -40,8 +24,13 @@
                  :assumptions (assumptions-of *environment*)
                  :bindings (bindings-of *environment*)))
 
+;; TODO: factor out and rename
 (def function side-effect-free-function? (operator)
-  (member operator '(eq car cdr cons consp eql + - * / 1+ 1- = < <= > >= length elt aref floor ceiling round)))
+  (member operator '(eq not null endp car cdr cons consp eql + - * / 1+ 1- = < <= > >= first second third fourth
+                     list list* length elt aref floor ceiling round typep
+                     find-class class-of class-finalized-p class-prototype class-slots class-default-initargs slot-definition-name slot-definition-initargs slot-definition-allocation slot-definition-location slot-definition-initfunction slot-definition-writers slot-definition-readers
+                     sb-int::proper-list-of-length-p sb-int:list-of-length-at-least-p sb-pcl::class-wrapper sb-pcl::safe-p sb-kernel:%instancep
+                     sb-kernel:layout-length sb-kernel:classoid-of sb-int:memq sb-pcl::check-obsolete-instance sb-pcl::slot-definition-type-check-function)))
 
 (def function variable-binding (name)
   (assert (symbolp name))
@@ -77,6 +66,9 @@
 (def generic collect-potential-side-effects (ast))
 
 (def generic may-do-side-effect? (ast)
+  (:method ((ast walked-form))
+    #t)
+
   (:method ((ast constant-form))
     #f)
 
@@ -146,6 +138,9 @@
     nil))
 
 (def generic may-do-non-local-exit? (ast)
+  (:method ((ast walked-form))
+    #t)
+
   (:method ((ast constant-form))
     #f)
 
@@ -175,6 +170,9 @@
     #t))
 
 (def generic does-non-local-exit? (ast)
+  (:method ((ast walked-form))
+    #f)
+
   (:method ((ast constant-form))
     #f)
 
@@ -225,65 +223,78 @@
 ;;;;;;
 ;;; Partial eval
 
+(def function partial-eval-lambda-list (argument-definitions argument-values)
+  (extend-bindings (partial-eval-bindings (mapcar #'cons
+                                                  (mapcar #'name-of (remove-if-not (of-type 'required-function-argument-form)
+                                                                                   argument-definitions))
+                                                  argument-values)))
+  ;; TODO: handle optional and keyword arguments
+  (awhen (find-if (of-type 'rest-function-argument-form) argument-definitions)
+    ;; TODO: value
+    ;; KLUDGE:
+    (setf (variable-binding (name-of it)) (make-instance 'constant-form :value nil)))
+  ;; KLUDGE:
+  (setf (variable-binding 'sb-pcl::slots-init-p) (make-instance 'constant-form :value nil))
+  (setf (variable-binding 'sb-pcl::slots-init) (make-instance 'constant-form :value nil))
+  (setf (variable-binding 'cl-partial-eval::.rest.) (make-instance 'constant-form :value (list :slot "value"))))
+
 (def function partial-eval-bindings (bindings)
   (mapcar (lambda (binding)
             (bind ((name (car binding))
-                   (value (partial-eval (cdr binding))))
+                   (value (%partial-eval (cdr binding))))
               (cons name value)))
           bindings))
 
 (def function partial-eval-implicit-progn-body (ast)
-  (iter (for body-ast-cell :on (if (consp ast)
-                                   ast
-                                   (body-of ast)))
-        (for body-ast = (car body-ast-cell))
-        (for evaluated-ast = (partial-eval body-ast))
-        (when evaluated-ast
-          (when (or (null (cdr body-ast-cell))
-                    (may-do-side-effect? evaluated-ast)
-                    (may-do-non-local-exit? evaluated-ast))
-            (collect evaluated-ast :into result))
-          (when (does-non-local-exit? evaluated-ast)
-            (return (make-progn-form result))))
-        (finally (return (make-progn-form result)))))
+  (aprog1 (iter (for body-ast-cell :on (if (consp ast)
+                                           ast
+                                           (body-of ast)))
+                (for body-ast = (car body-ast-cell))
+                (for evaluated-ast = (progn
+                                       (partial-eval.debug "Progn form element ~A" body-ast)
+                                       (%partial-eval body-ast)))
+                (when evaluated-ast
+                  (when (or (null (cdr body-ast-cell))
+                            (may-do-side-effect? evaluated-ast)
+                            (may-do-non-local-exit? evaluated-ast))
+                    (collect evaluated-ast :into result))
+                  (when (does-non-local-exit? evaluated-ast)
+                    (return (make-progn-form result))))
+                (finally (return (make-progn-form result))))
+    (partial-eval.debug "Result of implicit progn body is ~A" it)))
 
-(def (generic e) partial-eval (form)
-  (:documentation "
-PARTIAL-EVAL handles constants, function application and the following special forms:
-  IF, PROGN, BLOCK, RETURN-FROM, TAGBODY, GO, LET, LET*, SETQ, FLET and LABELS.
+(def (function e) partial-eval (form &optional (environment (make-empty-environment)))
+"PARTIAL-EVAL handles constants, function application and special forms.
+The FORM parameter is a lisp form and the ENVIRONMENT may be prefilled with assumptions.
+Partial evaluating a form results in a form that produces the same return value, the same side effects and the same non local exits."
+  (bind ((*environment* environment))
+    ;; FIXME: shall we really ignore?
+    (with-walker-configuration (:undefined-reference-handler nil)
+      (unwalk-form (%partial-eval (walk-form form))))))
 
-The FORM parameter is either a lisp form or an instance of WALKED-FORM.
-
-Partial evaluating a form results in a form that produces the same return value,
-the same side effects and the same non local return.
-")
-
-  (:method ((form list))
-    (bind ((*environment* (make-empty-environment)))
-      (unwalk-form (partial-eval (walk-form form)))))
-
+(def generic %partial-eval (form)
   (:method ((ast constant-form))
     ast)
 
   (:method ((ast if-form))
-    (flet ((eval-then ()
+    (flet ((partial-eval-then ()
              (bind ((*environment* (clone-environment)))
                (extend-assumptions `(not (eq #f ,(unwalk-form (condition-of ast)))))
-               (partial-eval (then-of ast))))
-           (eval-else ()
+               (%partial-eval (then-of ast))))
+           (partial-eval-else ()
              (bind ((*environment* (clone-environment)))
                (extend-assumptions `(eq #f ,(unwalk-form (condition-of ast))))
-               (partial-eval (else-of ast)))))
-      (bind ((evaluated-condition (partial-eval (condition-of ast))))
+               (%partial-eval (else-of ast)))))
+      (bind ((evaluated-condition (%partial-eval (condition-of ast))))
         (partial-eval.debug "Checking condition ~A" evaluated-condition)
         (if (typep evaluated-condition 'constant-form)
             (if (value-of evaluated-condition)
-                (eval-then)
-                (eval-else))
+                (partial-eval-then)
+                (partial-eval-else))
             (make-instance 'if-form
                            :condition evaluated-condition
-                           :then (eval-then)
-                           :else (eval-else))))))
+                           :then (partial-eval-then)
+                           :else (partial-eval-else))))))
 
   (:method ((ast progn-form))
     (partial-eval-implicit-progn-body ast))
@@ -297,7 +308,7 @@ the same side effects and the same non local return.
                   (eq non-local-exit (first all-non-local-exits))
                   (typep non-local-exit 'return-from-form)
                   (eq ast (target-block-of non-local-exit)))
-             (partial-eval (result-of non-local-exit)))
+             (%partial-eval (result-of non-local-exit)))
             ((block-referenced? ast evaluated-body)
              (make-instance 'block-form
                             :name (name-of ast)
@@ -305,7 +316,9 @@ the same side effects and the same non local return.
             (t evaluated-body))))
 
   (:method ((ast return-from-form))
-    ast)
+    (make-instance 'return-from-form
+                   :target-block (target-block-of ast)
+                   :result (%partial-eval (result-of ast))))
 
   (:method ((ast tagbody-form))
     (iter (with body = ast)
@@ -324,7 +337,8 @@ the same side effects and the same non local return.
             (return
               (aif non-local-exit
                    (make-progn-form (remove-if (of-type 'go-form) result))
-                   (make-instance 'constant-form :value nil))))))
+                   (or (make-instance 'progn-form :body (remove-if (of-type 'go-form) result))
+                       (make-instance 'constant-form :value nil)))))))
 
   (:method ((ast go-tag-form))
     ast)
@@ -333,7 +347,7 @@ the same side effects and the same non local return.
     ast)
 
   (:method ((ast setq-form))
-    (bind ((value (partial-eval (value-of ast)))
+    (bind ((value (%partial-eval (value-of ast)))
            (variable (variable-of ast)))
       (if (typep variable 'free-variable-reference-form)
           (make-instance 'setq-form
@@ -348,7 +362,7 @@ the same side effects and the same non local return.
            (*environment* (clone-environment))
            (bindings (mapcar (lambda (binding)
                                (bind ((name (car binding))
-                                      (value (partial-eval (cdr binding))))
+                                      (value (%partial-eval (cdr binding))))
                                  (when let*-form?
                                    (setf (variable-binding name) value))
                                  (cons name value)))
@@ -375,45 +389,119 @@ the same side effects and the same non local return.
               value))))
 
   (:method ((ast free-variable-reference-form))
+    ;; TODO: KLUDGE: ??? can we do this ???
+    (bind ((value (variable-binding (name-of ast))))
+      (if (eq :unbound value)
+          ast
+          (if (may-do-side-effect? value)
+              ast
+              value))))
+
+  (:method ((ast special-variable-reference-form))
+    ast)
+
+  (:method ((ast walked-lexical-function-object-form))
+    ast)
+
+  (:method ((ast free-function-object-form))
     ast)
 
   (:method ((ast lambda-function-form))
-    (make-instance 'lambda-function-form
-                   :arguments (arguments-of ast)
-                   :body (list (partial-eval-implicit-progn-body ast))))
+    (partial-eval.debug "Evaluating Lambda function form ~A" ast)
+    (partial-eval-implicit-progn-body ast))
 
   (:method ((ast free-application-form))
-    (bind ((operator (operator-of ast)))
+    (bind ((operator (operator-of ast))
+           (arguments (mapcar #'%partial-eval (arguments-of ast))))
+      ;; TODO: KLUDGE: move
+      (when (and (eq 'car operator)
+                 (typep (first arguments) 'free-application-form)
+                 (eq (operator-of (first arguments)) 'list*))
+        (return-from %partial-eval (%partial-eval (first (arguments-of (first arguments))))))
+      ;; TODO: KLUDGE: move
+      ;; infer types
+      (when (and (eq 'class-of operator)
+                 (typep (first arguments) 'variable-reference-form))
+        (return-from %partial-eval (make-instance 'constant-form :value (find-class 'standard-object))))
+      ;; TODO: KLUDGE: move
+      ;; infer types
+      (when (and (eq 'sb-kernel:classoid-of operator)
+                 (typep (first arguments) 'variable-reference-form))
+        (return-from %partial-eval (make-instance 'constant-form :value (sb-kernel:classoid-of (class-prototype (find-class 'standard-object))))))
+      ;; TODO: KLUDGE: move
+      ;; infer types
+      (when (and (eq 'typep operator)
+                 (typep (first arguments) 'variable-reference-form))
+        (return-from %partial-eval (make-instance 'constant-form :value (typep (class-prototype (find-class 'standard-object))
+                                                                               (value-of (second arguments))))))
+      ;; TODO: KLUDGE: move
+      ;; TODO: cannot find source by some reason
+      (when (eq 'sb-int:list-of-length-at-least-p operator)
+        (return-from %partial-eval (make-instance 'constant-form :value #t)))
       (if (side-effect-free-function? operator)
-          (bind ((arguments (mapcar #'partial-eval (arguments-of ast))))
+          (progn
             ;; TODO: should check assumptions in *environment*, because we may already have the return value there
             ;;       or we can infer the return value from the assumptions
+            (partial-eval.debug "Side effect free function call to ~A with arguments ~A" operator (arguments-of ast))
             (if (every (of-type 'constant-form) arguments)
-                (make-instance 'constant-form
-                               :value (apply operator (mapcar #'value-of arguments)))
+                (bind ((value (apply operator (mapcar #'value-of arguments))))
+                  (partial-eval.debug "Side effect free function call returned ~A" value)
+                  (make-instance 'constant-form :value value))
                 (make-instance 'free-application-form
                                :operator operator
                                :arguments arguments)))
-          (bind ((source (function-source operator)))
-            (if source
-                (bind ((*environment* (clone-environment))
-                       (lambda-ast (walk-form source)))
-                  (extend-bindings (partial-eval-bindings (mapcar #'cons
-                                                                  (mapcar #'name-of (arguments-of lambda-ast))
-                                                                  (arguments-of ast))))
-                  (partial-eval-implicit-progn-body lambda-ast))
-                (make-instance 'free-application-form
-                               :operator operator
-                               :arguments (mapcar #'partial-eval (arguments-of ast))))))))
+          (progn
+            ;; TODO: move these function specific stuff into a generic function or something?
+            (when (and (eq 'apply operator)
+                       (typep (first arguments) 'free-function-object-form))
+              (setf operator (name-of (first arguments))
+                    arguments (rest arguments)))
+            ;; TODO: KLUDGE: move
+            (when (and (eq 'funcall operator)
+                       (typep (first arguments) 'free-function-object-form))
+              (setf operator (name-of (first arguments))
+                    arguments (rest arguments)))
+            (bind ((source (or (make-function-lambda-form operator)
+                               (make-generic-function-lambda-form operator))))
+              (restart-case
+                  (if source
+                      (bind ((*environment* (clone-environment))
+                             (lambda-ast (walk-form source)))
+                        (partial-eval.debug "Function call to ~A ~A" operator source)
+                        ;;(break "Partial evaluating function call to ~A with arguments ~A" operator arguments)
+                        (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
+                        (partial-eval-implicit-progn-body lambda-ast))
+                      (make-instance 'free-application-form
+                                     :operator operator
+                                     :arguments arguments))
+                (give-up nil (make-instance 'constant-form :value "Gave up partial evaluating"))))))))
+
+  (:method ((ast multiple-value-call-form))
+    (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))
+           (*environment* (clone-environment)))
+      (partial-eval-lambda-list (arguments-of (function-designator-of ast)) arguments)
+      (%partial-eval (function-designator-of ast))))
+
+  (:method ((ast macrolet-form))
+    (partial-eval-implicit-progn-body ast))
 
   (:method ((ast flet-form))
+    ;; TODO: really?
+    (extend-bindings (bindings-of ast))
+    (partial-eval.debug "Evaluating flet function ~A" ast)
     (partial-eval-implicit-progn-body ast))
 
   (:method ((ast labels-form))
     (partial-eval-implicit-progn-body ast))
 
   (:method ((ast lexical-application-form))
-    ;; TODO: extend environment
     (bind ((*environment* (clone-environment))
-           (lambda-ast (code-of ast)))
-      (partial-eval-implicit-progn-body lambda-ast))))
+           (lambda-ast (code-of ast))
+           (argument-values (mapcar #'%partial-eval (arguments-of ast))))
+      (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A"
+                          (operator-of ast) (arguments-of lambda-ast) argument-values)
+      (partial-eval-lambda-list (arguments-of lambda-ast) argument-values)
+      (partial-eval-implicit-progn-body lambda-ast)))
+
+  (:method ((ast the-form))
+    (%partial-eval (value-of ast))))

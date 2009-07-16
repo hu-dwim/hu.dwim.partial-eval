@@ -30,7 +30,7 @@
 	    :components
             ((:file "package")
              (:file "suite" :depends-on ("package"))
-             (:file "match" :depends-on ("suite"))))))
+             (:file "partial-eval" :depends-on ("suite"))))))
 
 (defmethod perform :after ((o load-op) (c (eql (find-system :cl-partial-eval-test))))
   (in-package :cl-partial-eval-test)
