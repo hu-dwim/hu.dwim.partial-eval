@@ -12,6 +12,7 @@
         :alexandria
         :iterate
         :stefil
+        :defclass-star
         :cl-def
         :cl-syntax-sugar
         :cl-partial-eval)

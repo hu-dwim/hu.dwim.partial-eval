@@ -26,8 +26,8 @@
 
 ;; TODO: factor out and rename
 (def function side-effect-free-function? (operator)
-  (member operator '(eq not null endp car cdr cons consp eql + - * / 1+ 1- = < <= > >= first second third fourth
-                     list list* length elt aref floor ceiling round typep
+  (member operator '(eq not null endp car cdr cons consp eql + - * / 1+ 1- = < <= > >= first second third fourth getf
+                     list list* length elt aref floor ceiling round typep mapcar
                      find-class class-of class-finalized-p class-prototype class-slots class-default-initargs slot-definition-name slot-definition-initargs slot-definition-allocation slot-definition-location slot-definition-initfunction slot-definition-writers slot-definition-readers
                      sb-int::proper-list-of-length-p sb-int:list-of-length-at-least-p sb-pcl::class-wrapper sb-pcl::safe-p sb-kernel:%instancep
                      sb-kernel:layout-length sb-kernel:classoid-of sb-int:memq sb-pcl::check-obsolete-instance sb-pcl::slot-definition-type-check-function)))
@@ -62,8 +62,6 @@
          (first body))
         (t
          (make-instance 'progn-form :body body))))
-
-(def generic collect-potential-side-effects (ast))
 
 (def generic may-do-side-effect? (ast)
   (:method ((ast walked-form))
@@ -224,19 +222,27 @@
 ;;; Partial eval
 
 (def function partial-eval-lambda-list (argument-definitions argument-values)
-  (extend-bindings (partial-eval-bindings (mapcar #'cons
-                                                  (mapcar #'name-of (remove-if-not (of-type 'required-function-argument-form)
-                                                                                   argument-definitions))
-                                                  argument-values)))
-  ;; TODO: handle optional and keyword arguments
-  (awhen (find-if (of-type 'rest-function-argument-form) argument-definitions)
-    ;; TODO: value
-    ;; KLUDGE:
-    (setf (variable-binding (name-of it)) (make-instance 'constant-form :value nil)))
-  ;; KLUDGE:
-  (setf (variable-binding 'sb-pcl::slots-init-p) (make-instance 'constant-form :value nil))
-  (setf (variable-binding 'sb-pcl::slots-init) (make-instance 'constant-form :value nil))
-  (setf (variable-binding 'cl-partial-eval::.rest.) (make-instance 'constant-form :value (list :slot "value"))))
+  (when (or argument-definitions
+            argument-values)
+    (bind ((argument-names (mapcar 'name-of argument-definitions))
+           (evaluated-values (eval `(bind ((,(cadr (unwalk-form (make-instance 'lambda-function-form
+                                                                               :arguments argument-definitions
+                                                                               :body nil)))
+                                             ,(list 'quote (mapcar '%partial-eval argument-values))))
+                                      (list ,@argument-names)))))
+      (extend-bindings (mapcar (lambda (name value)
+                                 (cons name
+                                       (if (typep value 'walked-form)
+                                           value
+                                           (make-instance 'constant-form
+                                                          :value (if (listp value)
+                                                                     (mapcar (lambda (v)
+                                                                               (if (typep v 'constant-form)
+                                                                                   (value-of v)
+                                                                                   v))
+                                                                             value)
+                                                                     value)))))
+                               argument-names evaluated-values)))))
 
 (def function partial-eval-bindings (bindings)
   (mapcar (lambda (binding)
@@ -337,7 +343,7 @@ Partial evaluating a form results in a form that produces the same return value,
             (return
               (aif non-local-exit
                    (make-progn-form (remove-if (of-type 'go-form) result))
-                   (or (make-instance 'progn-form :body (remove-if (of-type 'go-form) result))
+                   (or (make-progn-form (remove-if (of-type 'go-form) result))
                        (make-instance 'constant-form :value nil)))))))
 
   (:method ((ast go-tag-form))
@@ -370,14 +376,18 @@ Partial evaluating a form results in a form that produces the same return value,
       (unless let*-form?
         (extend-bindings bindings))
       (bind ((evaluated-body (partial-eval-implicit-progn-body ast))
-             (runtime-bindings (remove-if-not (lambda (binding)
-                                                (bind ((name (car binding)))
-                                                  (variable-referenced? name evaluated-body)))
-                                              bindings)))
+             (runtime-bindings (remove-if (lambda (binding)
+                                            (bind ((name (car binding)))
+                                              (or (and (typep (cdr binding) 'variable-reference-form)
+                                                       (eq name (name-of (cdr binding))))
+                                                  (not (variable-referenced? name evaluated-body)))))
+                                          bindings)))
         (if runtime-bindings
             (make-instance (class-of ast)
                            :bindings runtime-bindings
-                           :body (list evaluated-body))
+                           :body (if (typep evaluated-body 'progn-form)
+                                     (body-of evaluated-body)
+                                     (list evaluated-body)))
             evaluated-body))))
 
   (:method ((ast lexical-variable-reference-form))
@@ -389,13 +399,18 @@ Partial evaluating a form results in a form that produces the same return value,
               value))))
 
   (:method ((ast free-variable-reference-form))
-    ;; TODO: KLUDGE: ??? can we do this ???
-    (bind ((value (variable-binding (name-of ast))))
-      (if (eq :unbound value)
-          ast
-          (if (may-do-side-effect? value)
+    ;; TODO: KLUDGE: remove this and return the ast as soon as parameter binding does work
+    ;; TODO: remove when keywords are walked into constant forms
+    (if (keywordp (name-of ast))
+        (make-instance 'constant-form :value (name-of ast))
+        ast
+        #+nil ;; TODO: delme eventually
+        (bind ((value (variable-binding (name-of ast))))
+          (if (eq :unbound value)
               ast
-              value))))
+              (if (may-do-side-effect? value)
+                  ast
+                  value)))))
 
   (:method ((ast special-variable-reference-form))
     ast)
@@ -422,18 +437,26 @@ Partial evaluating a form results in a form that produces the same return value,
       ;; infer types
       (when (and (eq 'class-of operator)
                  (typep (first arguments) 'variable-reference-form))
-        (return-from %partial-eval (make-instance 'constant-form :value (find-class 'standard-object))))
+        (return-from %partial-eval (make-instance 'constant-form :value (find-class 'cl-partial-eval-test:test))))
       ;; TODO: KLUDGE: move
       ;; infer types
       (when (and (eq 'sb-kernel:classoid-of operator)
                  (typep (first arguments) 'variable-reference-form))
-        (return-from %partial-eval (make-instance 'constant-form :value (sb-kernel:classoid-of (class-prototype (find-class 'standard-object))))))
+        (return-from %partial-eval (make-instance 'constant-form :value (sb-kernel:classoid-of (class-prototype (find-class 'cl-partial-eval-test:test))))))
       ;; TODO: KLUDGE: move
       ;; infer types
       (when (and (eq 'typep operator)
                  (typep (first arguments) 'variable-reference-form))
-        (return-from %partial-eval (make-instance 'constant-form :value (typep (class-prototype (find-class 'standard-object))
+
+        (return-from %partial-eval (make-instance 'constant-form :value (typep (class-prototype (find-class 'cl-partial-eval-test:test))
                                                                                (value-of (second arguments))))))
+      (when (and (eq 'cdr operator)
+                 (typep (first arguments) 'free-application-form)
+                 (eq 'list* (operator-of (first arguments)))
+                 (cdr (arguments-of (first arguments))))
+        (return-from %partial-eval (%partial-eval (make-instance 'free-application-form
+                                                                 :operator 'list*
+                                                                 :arguments (cdr (arguments-of (first arguments)))))))
       ;; TODO: KLUDGE: move
       ;; TODO: cannot find source by some reason
       (when (eq 'sb-int:list-of-length-at-least-p operator)
@@ -442,9 +465,14 @@ Partial evaluating a form results in a form that produces the same return value,
           (progn
             ;; TODO: should check assumptions in *environment*, because we may already have the return value there
             ;;       or we can infer the return value from the assumptions
-            (partial-eval.debug "Side effect free function call to ~A with arguments ~A" operator (arguments-of ast))
-            (if (every (of-type 'constant-form) arguments)
-                (bind ((value (apply operator (mapcar #'value-of arguments))))
+            (partial-eval.debug "Side effect free function call to ~A with arguments ~A" operator arguments)
+            ;; TODO: this assumes the function do not change, let the user decide
+            (if (every (of-type '(or constant-form free-function-object-form)) arguments)
+                (bind ((value (apply operator (mapcar (lambda (argument)
+                                                        (etypecase argument
+                                                          (constant-form (value-of argument))
+                                                          (free-function-object-form (name-of argument))))
+                                                      arguments))))
                   (partial-eval.debug "Side effect free function call returned ~A" value)
                   (make-instance 'constant-form :value value))
                 (make-instance 'free-application-form
@@ -455,7 +483,10 @@ Partial evaluating a form results in a form that produces the same return value,
             (when (and (eq 'apply operator)
                        (typep (first arguments) 'free-function-object-form))
               (setf operator (name-of (first arguments))
-                    arguments (rest arguments)))
+                    arguments (append (rest (butlast arguments))
+                                      (mapcar (lambda (value)
+                                                (make-instance 'constant-form :value value))
+                                              (value-of (last-elt arguments))))))
             ;; TODO: KLUDGE: move
             (when (and (eq 'funcall operator)
                        (typep (first arguments) 'free-function-object-form))

@@ -9,6 +9,9 @@
 ;;;;;;
 ;;; Test
 
+(defclass* test ()
+  (slot))
+
 (defun test (&optional (function-name 'make-instance))
   (compile nil (print (make-generic-function-lambda-form (fdefinition function-name)))))
 
