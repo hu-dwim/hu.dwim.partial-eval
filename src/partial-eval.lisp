@@ -4,7 +4,7 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :cl-partial-eval)
+(in-package :hu.dwim.partial-eval)
 
 ;;;;;;
 ;;; Environment
@@ -435,21 +435,25 @@ Partial evaluating a form results in a form that produces the same return value,
         (return-from %partial-eval (%partial-eval (first (arguments-of (first arguments))))))
       ;; TODO: KLUDGE: move
       ;; infer types
+      #+nil
       (when (and (eq 'class-of operator)
                  (typep (first arguments) 'variable-reference-form))
-        (return-from %partial-eval (make-instance 'constant-form :value (find-class 'cl-partial-eval-test:test))))
+        (return-from %partial-eval (make-instance 'constant-form :value (find-class 'hu.dwim.partial-eval.test:test))))
       ;; TODO: KLUDGE: move
       ;; infer types
+      #+nil
       (when (and (eq 'sb-kernel:classoid-of operator)
                  (typep (first arguments) 'variable-reference-form))
-        (return-from %partial-eval (make-instance 'constant-form :value (sb-kernel:classoid-of (class-prototype (find-class 'cl-partial-eval-test:test))))))
+        (return-from %partial-eval (make-instance 'constant-form :value (sb-kernel:classoid-of (class-prototype (find-class 'hu.dwim.partial-eval.test:test))))))
       ;; TODO: KLUDGE: move
       ;; infer types
+      #+nil
       (when (and (eq 'typep operator)
                  (typep (first arguments) 'variable-reference-form))
 
-        (return-from %partial-eval (make-instance 'constant-form :value (typep (class-prototype (find-class 'cl-partial-eval-test:test))
+        (return-from %partial-eval (make-instance 'constant-form :value (typep (class-prototype (find-class 'hu.dwim.partial-eval.test:test))
                                                                                (value-of (second arguments))))))
+      ;; TODO: factor out into a generic function
       (when (and (eq 'cdr operator)
                  (typep (first arguments) 'free-application-form)
                  (eq 'list* (operator-of (first arguments)))
@@ -458,7 +462,7 @@ Partial evaluating a form results in a form that produces the same return value,
                                                                  :operator 'list*
                                                                  :arguments (cdr (arguments-of (first arguments)))))))
       ;; TODO: KLUDGE: move
-      ;; TODO: cannot find source by some reason
+      ;; TODO: cannot find source by some reason (eh, not loaded)
       (when (eq 'sb-int:list-of-length-at-least-p operator)
         (return-from %partial-eval (make-instance 'constant-form :value #t)))
       (if (side-effect-free-function? operator)

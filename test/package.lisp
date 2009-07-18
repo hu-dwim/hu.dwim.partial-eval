@@ -4,9 +4,9 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :cl-partial-eval)
+(in-package :hu.dwim.partial-eval)
 
-(defpackage :cl-partial-eval-test
+(defpackage :hu.dwim.partial-eval.test
   (:use :common-lisp
         :metabang-bind
         :alexandria
@@ -15,6 +15,6 @@
         :defclass-star
         :cl-def
         :cl-syntax-sugar
-        :cl-partial-eval)
+        :hu.dwim.partial-eval)
 
   (:export #:test))

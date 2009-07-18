@@ -4,19 +4,28 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :cl-partial-eval-test)
+(in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
 ;;; Test
 
-(defclass* test ()
+(def class* test ()
   (slot))
 
-(defun test (&optional (function-name 'make-instance))
-  (compile nil (print (make-generic-function-lambda-form (fdefinition function-name)))))
+(defun read-pcl-sources ()
+  (clrhash *sources*)
+  (iter (with *package* = (find-package :sb-pcl))
+        (for file-name :in (directory "/home/levy/workspace/sbcl/src/pcl/*.lisp"))
+        (read-source file-name)))
+
+(read-pcl-sources)
 
 (defun read-this-source ()
-  (read-source (cl-partial-eval-system::system-relative-pathname :cl-partial-eval-test "/test/partial-eval.lisp")))
+  (read-source (hu.dwim.partial-eval.system::system-relative-pathname :hu.dwim.partial-eval.test "/test/partial-eval.lisp")))
+
+(read-this-source)
+
+(defgeneric foo (i))
 
 (defmethod foo (i)
   (print "t"))

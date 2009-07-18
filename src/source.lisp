@@ -1,4 +1,10 @@
-(in-package :cl-partial-eval)
+;;; -*- mode: Lisp; Syntax: Common-Lisp; -*-
+;;;
+;;; Copyright (c) 2009 by the authors.
+;;;
+;;; See LICENCE for details.
+
+(in-package :hu.dwim.partial-eval)
 
 ;;;;;;
 ;;; Source provider
@@ -6,62 +12,40 @@
 (def (special-variable e) *sources* (make-hash-table :test #'equal))
 
 (def (function e) read-source (file-name)
-  (setf (gethash file-name *sources*)
-        (with-open-file (src file-name)
-          (iter (for item = (source-text:source-read src nil src nil nil))
-                (until (eq item src))
-                (collect item)
-                (until (typep item 'source-text:source-lexical-error))))))
-
-(def (function e) read-pcl-sources ()
-  (clrhash *sources*)
-  (iter (with *package* = (find-package :sb-pcl))
-        (for file-name :in (directory "/home/levy/workspace/sbcl/src/pcl/*.lisp"))
-        (read-source file-name)))
-
-(def (generic e) make-lisp-form (node)
-  (:method ((node source-text:source-semicolon-comment))
-    (values))
-
-  (:method ((node source-text:source-number))
-    (source-text:source-number-value node))
-
-  (:method ((node source-text:source-string))
-    (source-text:source-string-value node))
-
-  (:method ((node source-text:source-list))
-    (mapcar 'make-lisp-form (source-text:source-sequence-elements node)))
-
-  (:method ((node source-text:source-symbol))
-    (source-text:source-symbol-value node))
-
-  (:method ((node source-text:source-subform))
-    (make-lisp-form (source-text:source-object-subform node)))
-
-  (:method ((node source-text:source-quote))
-    (list 'quote (call-next-method)))
-
-  (:method ((node source-text:source-function))
-    (list 'function (call-next-method))))
+  ;; NOTE: all this hassle is to workaround SBCL's bootstrapping package names
+  (bind ((original-find-package (fdefinition 'find-package)))
+    (unwind-protect
+         (progn
+           (handler-bind ((package-error (lambda (e)
+                                           (continue e))))
+             (setf (fdefinition 'find-package) (lambda (designator)
+                                                 (if (stringp designator)
+                                                     (funcall original-find-package (substitute #\- #\! designator))
+                                                     (funcall original-find-package designator)))))
+           (setf (gethash file-name *sources*)
+                 (with-open-file (src file-name)
+                   (iter (for form = (ignore-errors (read src #f :eof)))
+                         (until (eq form :eof))
+                         (collect form)))))
+      (handler-bind ((package-error (lambda (e)
+                                      (continue e))))
+        (setf (fdefinition 'find-package) original-find-package)))))
 
 (def (function e) find-function-source (function-name)
   (iter (for (file-name source) :in-hashtable *sources*)
-        (iter (for node :in source)
-              (when (typep node 'source-text:source-list)
-                (bind ((elements (source-text:source-sequence-elements node))
-                       (first-node (first elements))
-                       (second-node (second elements)))
-                  (when (and (typep first-node 'source-text:source-symbol)
-                             (eq 'defun (source-text:source-symbol-value first-node))
-                             (typep second-node 'source-text:source-symbol)
-                             (eq function-name (source-text:source-symbol-value second-node)))
-                    (return-from find-function-source node)))))))
+        (iter (for form :in source)
+              (when (listp form)
+                (bind ((first-form (first form))
+                       (second-form (second form)))
+                  (when (and (eq 'defun first-form)
+                             (eq function-name second-form))
+                    (return-from find-function-source form)))))))
 
 (def (function e) make-function-lambda-form (function-name)
   (awhen (find-function-source function-name)
-    `(lambda ,@(cddr (make-lisp-form it)))))
+    `(lambda ,@(cddr it))))
 
-;; TODO: use the one in walker
+;; TODO: use the one in alexandria
 (def function split-function-lambda-list (lambda-list)
   (iter (for argument-cell :on lambda-list)
         (for argument = (car argument-cell))
@@ -78,14 +62,13 @@
          (pathname (make-pathname :device nil :defaults (translate-logical-pathname namestring)))
          (source (gethash pathname *sources*)))
     (iter (with index = 0)
-          (for node :in source)
-          (when (typep node 'source-text:source-list)
+          (for form :in source)
+          (when (listp form)
             (when (= index toplevel-form-number)
-              (return (bind ((form (make-lisp-form node)))
-                        (with-unique-names (arguments methods)
-                          `(lambda (,arguments ,methods)
-                             (bind ((,(append required-arguments other-arguments?) ,arguments))
-                               ,@(nthcdr (1+ (position-if #'consp form)) form)))))))
+              (return (with-unique-names (arguments methods)
+                        `(lambda (,arguments ,methods)
+                           (bind ((,(append required-arguments other-arguments?) ,arguments))
+                             ,@(nthcdr (1+ (position-if #'consp form)) form))))))
             (incf index))
           (finally (error "Cannot find source for ~A" method)))))
 

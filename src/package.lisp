@@ -6,7 +6,7 @@
 
 (in-package :cl-user)
 
-(defpackage :cl-partial-eval
+(defpackage :hu.dwim.partial-eval
   (:use :common-lisp
         :metabang-bind
         :alexandria
@@ -19,12 +19,13 @@
         :cl-syntax-sugar
         :cl-walker
         :cl-yalog
-        :cl-partial-eval-system)
+        :hu.dwim.util
+        :hu.dwim.partial-eval.system)
 
   (:shadow #:environment
            #:make-empty-environment))
 
-(in-package :cl-partial-eval)
+(in-package :hu.dwim.partial-eval)
 
 (def logger partial-eval ()
   :level (if *load-as-production-p* +info+ +debug+)

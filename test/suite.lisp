@@ -4,6 +4,6 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :cl-partial-eval-test)
+(in-package :hu.dwim.partial-eval.test)
 
 (defsuite* (test :in root-suite))
