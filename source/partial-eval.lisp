@@ -27,7 +27,7 @@
 ;; TODO: factor out and rename
 (def function side-effect-free-function? (operator)
   (member operator '(eq not null endp car cdr cons consp eql + - * / 1+ 1- = < <= > >= first second third fourth getf
-                     list list* length elt aref floor ceiling round typep mapcar
+                     list list* length elt aref floor ceiling round typep mapcar stringp symbolp
                      find-class class-of class-finalized-p class-prototype class-slots class-default-initargs slot-definition-name slot-definition-initargs slot-definition-allocation slot-definition-location slot-definition-initfunction slot-definition-writers slot-definition-readers
                      sb-int::proper-list-of-length-p sb-int:list-of-length-at-least-p sb-pcl::class-wrapper sb-pcl::safe-p sb-kernel:%instancep
                      sb-kernel:layout-length sb-kernel:classoid-of sb-int:memq sb-pcl::check-obsolete-instance sb-pcl::slot-definition-type-check-function)))
@@ -165,7 +165,7 @@
     #f)
 
   (:method ((ast free-application-form))
-    #t))
+    (not (side-effect-free-function? (operator-of ast)))))
 
 (def generic does-non-local-exit? (ast)
   (:method ((ast walked-form))
@@ -328,20 +328,27 @@ Partial evaluating a form results in a form that produces the same return value,
 
   (:method ((ast tagbody-form))
     (iter (with body = ast)
+          (for count :from 0)
+          (when (= count 10)
+            (break "Too many unrolling of tagbody go forms")
+            (return ast))
           (bind ((evaluated-body (partial-eval-implicit-progn-body body))
-                 (non-local-exit (does-non-local-exit? evaluated-body)))
+                 (non-local-exits (remove-if-not (lambda (non-local-exit)
+                                                   (and (typep non-local-exit 'go-form)
+                                                        (eq ast (enclosing-tagbody-of non-local-exit))))
+                                                 (collect-potential-non-local-exits evaluated-body))))
             (if (typep evaluated-body 'progn-form)
                 (appending (body-of evaluated-body) :into result)
                 (collect evaluated-body :into result))
-            (when (and non-local-exit
-                       (typep non-local-exit 'go-form)
-                       (eq ast (enclosing-tagbody-of non-local-exit)))
-              (setf body (jump-target-of non-local-exit))
-              ;;(break "~A" (princ-to-string (unwalk-form (make-progn-form result))))
+            (when (and (length= 1 non-local-exits)
+                       (eq ast (enclosing-tagbody-of (first non-local-exits))))
+              (setf body (jump-target-of (first non-local-exits)))
+              ;; (break "~A" (princ-to-string (unwalk-form (make-progn-form result))))
               (when body
                 (next-iteration)))
+            ;; TODO: return tagbody-form when cannot be fully unrolled
             (return
-              (aif non-local-exit
+              (aif non-local-exits
                    (make-progn-form (remove-if (of-type 'go-form) result))
                    (or (make-progn-form (remove-if (of-type 'go-form) result))
                        (make-instance 'constant-form :value nil)))))))
@@ -382,13 +389,44 @@ Partial evaluating a form results in a form that produces the same return value,
                                                        (eq name (name-of (cdr binding))))
                                                   (not (variable-referenced? name evaluated-body)))))
                                           bindings)))
-        (if runtime-bindings
-            (make-instance (class-of ast)
-                           :bindings runtime-bindings
-                           :body (if (typep evaluated-body 'progn-form)
-                                     (body-of evaluated-body)
-                                     (list evaluated-body)))
-            evaluated-body))))
+        ;; make common subexpressions local variables
+        (bind ((body (make-instance 'progn-form
+                                    :body (if (typep evaluated-body 'progn-form)
+                                              (body-of evaluated-body)
+                                              (list evaluated-body))))
+               (seen-forms (make-hash-table)))
+          (map-ast (lambda (ast)
+                     (when (typep ast 'walked-form)
+                       (if (gethash ast seen-forms)
+                           (incf (gethash ast seen-forms))
+                           (setf (gethash ast seen-forms) 1)))
+                     ast)
+                   body)
+          (map nil 'funcall
+               (iter (for (key value) :in-hashtable seen-forms)
+                     (when (and (not (typep key '(or constant-form variable-reference-form)))
+                                (not (may-do-side-effect? key))
+                                (not (may-do-non-local-exit? key))
+                                (> value 1))
+                       (bind ((name (gensym)))
+                         (push (cons name (bind ((class (class-of key)))
+                                            (prog1-bind clone (make-instance class)
+                                              (dolist (slot (class-slots class))
+                                                (when (slot-boundp-using-class class key slot)
+                                                  (setf (slot-value-using-class class clone slot) (slot-value-using-class class key slot)))))))
+                               runtime-bindings)
+                         (map-ast (lambda (ast)
+                                    (when (eq key ast)
+                                      (collect (bind ((key key))
+                                                 (lambda ()
+                                                   (change-class key 'lexical-variable-reference-form :name name)))))
+                                    ast)
+                                  body)))))
+          (if runtime-bindings
+              (make-instance 'let*-form #+nil (class-of ast) ;; TODO: based on whether if runtime-bindings were extended
+                             :bindings runtime-bindings
+                             :body (body-of body))
+              evaluated-body)))))
 
   (:method ((ast lexical-variable-reference-form))
     (bind ((value (variable-binding (name-of ast))))
@@ -540,3 +578,9 @@ Partial evaluating a form results in a form that produces the same return value,
 
   (:method ((ast the-form))
     (%partial-eval (value-of ast))))
+
+(def function find-ancestor (ast predicate)
+  (iter (for ancestor-ast :initially (parent-of ast) :then (parent-of ancestor-ast))
+        (while ancestor-ast)
+        (awhen (funcall predicate ancestor-ast)
+          (return it))))

@@ -6,10 +6,11 @@
 
 (in-package :common-lisp-user)
 
-(defpackage :hu.dwim.partial-eval.test
+(defpackage :hu.dwim.partial-eval.documentation
   (:use :hu.dwim.common-lisp
-        :hu.dwim.defclass-star
         :hu.dwim.def
+        :hu.dwim.defclass-star
         :hu.dwim.partial-eval
-        :hu.dwim.stefil
-        :hu.dwim.syntax-sugar))
+        :hu.dwim.syntax-sugar
+        :hu.dwim.util
+        :hu.dwim.wui))

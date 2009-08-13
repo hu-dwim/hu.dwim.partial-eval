@@ -1,4 +1,4 @@
-;; -*- mode: Lisp; Syntax: Common-Lisp; -*-
+;;; -*- mode: Lisp; Syntax: Common-Lisp; -*-
 ;;;
 ;;; Copyright (c) 2009 by the authors.
 ;;;
@@ -21,7 +21,7 @@
 (read-pcl-sources)
 
 (defun read-this-source ()
-  (read-source (hu.dwim.partial-eval.system::system-relative-pathname :hu.dwim.partial-eval.test "/test/partial-eval.lisp")))
+  (read-source (asdf::system-relative-pathname :hu.dwim.partial-eval.test "/test/partial-eval.lisp")))
 
 (read-this-source)
 
@@ -141,6 +141,7 @@
 
 (declaim (inline match))
 
+#+nil
 (defun match (expression text)
   "A very simple matcher that takes EXPRESSION as a sequence of alphanumeric characters, (), *, + and ? with the usual regular expression semantics.
 Returns an index into TEXT specifying the next character that was not matched by expression or NIL if no prefix of TEXT matches."
@@ -183,11 +184,54 @@ Returns an index into TEXT specifying the next character that was not matched by
                       (t
                        (if match-index
                            (progn
+                             ;; TODO: this is here to work around that the if for match-index will produce 1 in this case
+                             (setf match-index 1)
                              (incf text-index match-index)
                              (incf expression-index match-index))
                            (return nil)))))))))
     (declare (optimize (speed 3) (debug 0) (safety 0)))
     (%match expression text)))
+
+(defun match (expression text)
+  (let ((text-length (length text)))
+    (labels ((%match (expression text position)
+               (if (stringp expression)
+                   (loop
+                      with expression-length = (length expression)
+                      for expression-index :from 0 :below expression-length
+                      for text-index :from position
+                      when (or (>= text-index text-length)
+                               (not (char= (elt expression expression-index)
+                                           (elt text text-index))))
+                      do (return nil)
+                      finally (return expression-index))
+                   (let ((head (car expression)))
+                     (if (symbolp head)
+                         (ecase head
+                           (? #+nil (assert (not (cddr expression))) ;; TODO:
+                              (or (%match (second expression) text position)
+                                  0))
+                           (* #+nil (assert (not (cddr expression))) ;; TODO:
+                              (loop
+                                 with sum = 0
+                                 for length = (%match (second expression) text position)
+                                 do (if length
+                                        (progn
+                                          (incf position length)
+                                          (incf sum length))
+                                        (return sum)))))
+                         (loop
+                            with sum = 0
+                            for element :in expression
+                            for length = (%match element text position)
+                            do (if length
+                                   (progn
+                                     (incf position length)
+                                     (incf sum length))
+                                   (return nil))
+                            finally (return sum)))))))
+      ;; (declare (optimize (speed 3) (debug 0) (safety 0)))
+      (%match expression text 0))))
 
 (def test test/match/inline ()
   (disassemble '(lambda (text)
@@ -195,7 +239,7 @@ Returns an index into TEXT specifying the next character that was not matched by
                  (match "a(ab)*b" text))))
 
 (def test test/match/call ()
-  (bind ((expression "a(ab)*b"))
+  (bind ((expression '("a" (* "ab") "b")))
     (is (not (match expression "")))
     (is (not (match expression "a")))
     (is (not (match expression "aa")))
