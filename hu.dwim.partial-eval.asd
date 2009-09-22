@@ -23,8 +23,7 @@
                :hu.dwim.walker
                :swank)
   :components ((:module "source"
-                :components ((:file "package")
-                             (:file "duplicates" :depends-on ("package"))
-                             (:file "configuration" :depends-on ("duplicates"))
+                :components ((:file "configuration" :depends-on ("package"))
                              (:file "source" :depends-on ("configuration"))
+                             (:file "package")
                              (:file "partial-eval" :depends-on ("source"))))))
