@@ -122,12 +122,3 @@
                                           :end
                                             (return-from nil r))))))
     (partial-eval undecidable-non-local-exit)))
-
-
-(def test test/special-form/xxx ()
-  (partial-eval '(let ((base 2)
-                       (result nil))
-                  (tagbody
-                   :begin
-                     (setq result base)
-                     (go :begin)))))
