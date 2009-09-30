@@ -38,5 +38,9 @@
       (member (operator-of ast) '(list-append-with-recursion))))
 
 (def test test/list-append-with-recursion/partial-eval ()
-  (is (equal (partial-eval '(list-append-with-recursion '(1 2 3) list) :layer 'list-append-with-recursion-layer)
-             '(cons 1 (cons 2 (cons 3 list))))))
+  (with-active-layers (list-append-with-recursion-layer)
+    (is (equal (partial-eval '(list-append-with-recursion '(1 2 3) list))
+               '(cons 1 (cons 2 (cons 3 list)))))
+    #+nil
+    (is (equal (partial-eval '(list-append-with-recursion list '(1 2 3)))
+               nil))))

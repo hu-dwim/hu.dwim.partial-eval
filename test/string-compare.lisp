@@ -38,21 +38,50 @@
 (def layer string-compare-with-loop-layer (standard-partial-eval-layer)
   ())
 
+(def layered-method eval-function-call? :in string-compare-with-loop-layer ((ast free-application-form))
+  (or (call-next-method)
+      (member (operator-of ast) '(aref))))
+
 (def layered-method inline-function-call? :in string-compare-with-loop-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(string-compare-with-loop))))
 
+(def layered-method %partial-eval :in string-compare-with-loop-layer ((ast free-application-form))
+  (aif (and (eq 'length (operator-of ast))
+            (find (unwalk-form (make-instance 'free-application-form
+                                              :operator 'length
+                                              :arguments (mapcar #'%partial-eval (arguments-of ast))))
+                  (hu.dwim.partial-eval::assumptions-of hu.dwim.partial-eval::*environment*) :test (lambda (a b) (member a b :test 'equal))))
+       (make-instance 'constant-form :value (second it))
+       (call-next-method)))
+
 (def test test/string-compare-with-loop/partial-eval ()
-  (is (equal (partial-eval '(string-compare-with-loop "he" text) :layer 'string-compare-with-loop-layer)
-             '(if (= 2 (length text))
-               (block nil
-                 (if (char= #\h (aref text 0))
-                     nil
-                     (return-from nil nil))
-                 (if (char= #\e (aref text 1))
-                     nil
-                     (return-from nil nil))
-                 (return-from nil t))))))
+  (with-active-layers (string-compare-with-loop-layer)
+    (is (equal t (partial-eval '(string-compare-with-loop "he" "he"))))
+    (is (equal nil (partial-eval '(string-compare-with-loop "he" "hello"))))
+    (is (equal (partial-eval '(string-compare-with-loop "" text))
+               '(if (= 0 (length text))
+                    t)))
+    (is (equal (partial-eval '(string-compare-with-loop "he" text))
+               '(if (= 2 (length text))
+                 (block nil
+                   (if (char= #\h (aref text 0))
+                       nil
+                       (return-from nil nil))
+                   (if (char= #\e (aref text 1))
+                       nil
+                       (return-from nil nil))
+                   (return-from nil t)))))
+    (bind ((evaluated-form (partial-eval '(string-compare-with-loop t-1 t-2))))
+      (is (equal t (eval `(bind ((t-1 "he")
+                                 (t-2 "he"))
+                            ,evaluated-form))))
+      (is (equal nil (eval `(bind ((t-1 "he")
+                                   (t-2 "hi"))
+                              ,evaluated-form))))
+      (is (equal nil (eval `(bind ((t-1 "he")
+                                   (t-2 "hello"))
+                              ,evaluated-form)))))))
 
 ;;;;;;
 ;;; string-compare-with-recursion
@@ -89,10 +118,21 @@
 (def layer string-compare-with-recursion-layer (standard-partial-eval-layer)
   ())
 
+(def layered-method eval-function-call? :in string-compare-with-recursion-layer ((ast free-application-form))
+  (or (call-next-method)
+      (member (operator-of ast) '(aref))))
+
 (def layered-method inline-function-call? :in string-compare-with-recursion-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(string-compare-with-recursion))))
 
 (def test test/string-compare-with-recursion/partial-eval ()
-  (is (equal (partial-eval '(string-compare-with-recursion "he" text) :layer 'string-compare-with-recursion-layer)
-             nil)))
+  (with-active-layers (string-compare-with-recursion-layer)
+    (is (equal (partial-eval '(string-compare-with-recursion "" text))
+               '(if (= 0 (length text))
+                    t)))
+    (is (equal (partial-eval '(string-compare-with-recursion "he" text))
+               '(if (= 2 (length text))
+                    (if (char= #\h (aref text 0))
+                        (if (char= #\e (aref text 1))
+                            t)))))))

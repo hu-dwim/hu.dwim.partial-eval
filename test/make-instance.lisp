@@ -25,8 +25,10 @@
       (member (operator-of ast) '(standard-class-without-slots))))
 
 (def test test/standard-class-without-slots/partial-eval ()
-  (is (equal (partial-eval '(make-instance initialize-instance allocate-instance) :layer 'standard-class-without-slots-layer)
-             nil)))
+  #+nil
+  (with-active-layers (standard-class-without-slots-layer)
+    (is (equal (partial-eval '(make-instance initialize-instance allocate-instance))
+               nil))))
 
 ;;;;;;
 ;;; standard-class-with-slots
@@ -48,5 +50,7 @@
       (member (operator-of ast) '(make-instance initialize-instance allocate-instance))))
 
 (def test test/standard-class-with-slots/partial-eval ()
-  (is (equal (partial-eval '(make-instance 'standard-class-with-slots) :layer 'standard-class-with-slots-layer)
-             nil)))
+  #+nil
+  (with-active-layers (standard-class-with-slots-layer)
+    (is (equal (partial-eval '(make-instance 'standard-class-with-slots))
+               nil))))

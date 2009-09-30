@@ -12,8 +12,8 @@
 (def special-variable *environment*)
 
 (def class* environment ()
-  ((assumptions nil)
-   (bindings nil)))
+  ((assumptions nil :documentation "A list of forms that evaluate to #t in the current environment")
+   (bindings nil :documentation "A list of name value pairs, where name is a symbol and value is walked-form")))
 
 (def (function e) make-environment (&key assumptions bindings)
   (make-instance 'environment
@@ -66,7 +66,7 @@
 
   (:method :in standard-partial-eval-layer ((ast free-application-form))
     (or (call-next-method)
-        (member (operator-of ast) '(eq eql not null car cdr consp first second third fourth length < <= = => > - + * /)))))
+        (member (operator-of ast) '(eq eql not null car cdr consp first second third fourth length char= < <= = >= > - + * / 1+ 1-)))))
 
 (def (layered-function e) inline-function-call? (ast)
   (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
@@ -301,15 +301,24 @@
     ast)
 
   (:method ((ast if-form))
-    (flet ((partial-eval-then ()
-             (bind ((*environment* (clone-environment)))
-               (extend-assumptions `(not (eq #f ,(unwalk-form (condition-of ast)))))
-               (%partial-eval (then-of ast))))
-           (partial-eval-else ()
-             (bind ((*environment* (clone-environment)))
-               (extend-assumptions `(eq #f ,(unwalk-form (condition-of ast))))
-               (%partial-eval (else-of ast)))))
-      (bind ((evaluated-condition (%partial-eval (condition-of ast))))
+    (bind ((evaluated-condition (%partial-eval (condition-of ast))))
+      (flet ((partial-eval-then ()
+               (bind ((*environment* (clone-environment))
+                      (form (if (typep evaluated-condition 'constant-form)
+                                (unwalk-form (condition-of ast))
+                                (unwalk-form evaluated-condition))))
+                 (if (and (consp form)
+                          (member (first form) '(eq eql =)))
+                     (extend-assumptions form)
+                     (extend-assumptions `(not (eq #f ,form))))
+                 (%partial-eval (then-of ast))))
+             (partial-eval-else ()
+               (bind ((*environment* (clone-environment))
+                      (form (if (typep evaluated-condition 'constant-form)
+                                (unwalk-form (condition-of ast))
+                                (unwalk-form evaluated-condition))))
+                 (extend-assumptions `(eq #f ,form))
+                 (%partial-eval (else-of ast)))))
         (partial-eval.debug "If condition evaluated to ~A" evaluated-condition)
         (if (typep evaluated-condition 'constant-form)
             (if (value-of evaluated-condition)
@@ -348,6 +357,7 @@
     (iter (with body = ast)
           (for count :from 0)
           (when (= count 10)
+            (partial-eval.debug "Too many go statements evaluated, giving up unrolling ~A" ast)
             (return ast))
           (bind ((evaluated-body (partial-eval-implicit-progn-body body))
                  (non-local-exits (collect-potential-non-local-exits evaluated-body)))
@@ -363,9 +373,15 @@
             (return
               (if non-local-exits
                   (if (length= 1 non-local-exits)
-                      (make-progn-form (remove-if (of-type 'go-form) result))
-                      ast)
-                  (make-instance 'constant-form :value nil))))))
+                      (progn
+                        (partial-eval.debug "Unrolling ~A is finished successfully")
+                        (make-progn-form (remove-if (of-type 'go-form) result)))
+                      (progn
+                        (partial-eval.debug "Too many non-local exists, giving up unrolling ~A" ast)
+                        ast))
+                  (progn
+                    (partial-eval.debug "Unrolling ~A resulted in complete elimination")
+                    (make-instance 'constant-form :value nil)))))))
 
   (:method ((ast go-tag-form))
     ast)
@@ -374,8 +390,13 @@
     ast)
 
   (:method ((ast setq-form))
-    (prog1-bind value (%partial-eval (value-of ast))
-      (setf (variable-binding (name-of (variable-of ast))) value)))
+    (bind ((value (%partial-eval (value-of ast)))
+           (variable (variable-of ast)))
+      (if (typep variable 'free-variable-reference-form)
+          (make-instance 'setq-form
+                         :variable variable
+                         :value value)
+          (setf (variable-binding (name-of variable)) value))))
 
   (:method ((ast variable-binding-form))
     (bind ((let*-form? (typep ast 'let*-form))
@@ -487,7 +508,7 @@
                    (if source
                        (bind ((*environment* (clone-environment))
                               (lambda-ast (walk-form source)))
-                         (partial-eval.debug "Function call to ~A ~A" operator source)
+                         (partial-eval.debug "Inlining function call to ~A ~A" operator source)
                          ;;(break "Partial evaluating function call to ~A with arguments ~A" operator arguments)
                          (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
                          (partial-eval-implicit-progn-body lambda-ast))
@@ -495,9 +516,11 @@
                                       :operator operator
                                       :arguments arguments))
                  (give-up nil ast))))
-            (t (make-instance 'free-application-form
-                              :operator operator
-                              :arguments arguments)))))
+            (t
+             (partial-eval.debug "Leaving function call to ~A intact" operator)
+             (make-instance 'free-application-form
+                            :operator operator
+                            :arguments arguments)))))
 
   (:method ((ast multiple-value-call-form))
     (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))
