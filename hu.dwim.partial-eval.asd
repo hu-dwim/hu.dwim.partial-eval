@@ -13,9 +13,8 @@
   :author ("Levente Mészáros <levente.meszaros@gmail.com>")
   :licence "BSD / Public domain"
   :description "Extensible partial evaluator"
-  :depends-on (#+nil :cl-unification
-               :hu.dwim.common-lisp
-               :hu.dwim.def
+  :depends-on (:hu.dwim.common-lisp
+               :hu.dwim.def+contextl
                :hu.dwim.def+hu.dwim.logger
                :hu.dwim.defclass-star
                :hu.dwim.syntax-sugar

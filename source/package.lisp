@@ -7,18 +7,15 @@
 (in-package :common-lisp-user)
 
 (defpackage :hu.dwim.partial-eval
-  (:use :hu.dwim.asdf
+  (:use :contextl
+        :hu.dwim.asdf
         :hu.dwim.common-lisp
         :hu.dwim.def
         :hu.dwim.defclass-star
         :hu.dwim.logger
         :hu.dwim.syntax-sugar
         :hu.dwim.util
-        :hu.dwim.walker
-        #+nil :unify)
-
-  (:shadow #:environment
-           #:make-empty-environment))
+        :hu.dwim.walker))
 
 (in-package :hu.dwim.partial-eval)
 
