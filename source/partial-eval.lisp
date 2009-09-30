@@ -26,9 +26,14 @@
                  :assumptions (assumptions-of *environment*)
                  :bindings (bindings-of *environment*)))
 
+;;;;;;
+;;; Variable bindings
+
+(def constant +unbound-variable+ '+unbound-variable+)
+
 (def function variable-binding (name)
   (assert (symbolp name))
-  (aprog1 (getf (bindings-of *environment*) name :unbound)
+  (aprog1 (getf (bindings-of *environment*) name +unbound-variable+)
     (partial-eval.debug "Retrieving variable binding ~A results in ~A" name it)))
 
 (def function (setf variable-binding) (new-value name)
@@ -38,22 +43,27 @@
 
 (def function extend-bindings (bindings)
   (dolist (binding bindings)
-    (bind ((name (car binding))
-           (value (cdr binding)))
-      (setf (variable-binding name) value))))
+    (setf (variable-binding (car binding)) (cdr binding))))
+
+;;;;;;
+;;; Assumptions
 
 (def function extend-assumptions (assumption)
-  (partial-eval.debug "Extending assumptions ~A" assumption)
+  (partial-eval.debug "Extending assumptions with ~A" assumption)
   (push assumption (assumptions-of *environment*)))
 
 ;;;;;;
-;;; Extension point
+;;; Customization points
 
 (def (layered-function e) eval-function-call? (ast)
+  (:documentation "Returns TRUE if the function call should be evaluated at partial eval time, FALSE otherwise.")
+
   (:method ((ast free-application-form))
     (member (operator-of ast) '(eq eql not null car cdr consp eql first second third fourth getf))))
 
 (def (layered-function e) inline-function-call? (ast)
+  (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
+
   (:method ((ast free-application-form))
     #f))
 
@@ -277,7 +287,9 @@
                 (finally (return (make-progn-form result))))
     (partial-eval.debug "Result of implicit progn body is ~A" it)))
 
-(def generic %partial-eval (form)
+(def (layered-function e) %partial-eval (form)
+  (:documentation "This function is the recursive variant of PARTIAL-EVAL.")
+
   (:method ((ast constant-form))
     ast)
 
@@ -349,8 +361,7 @@
             (return
               (aif non-local-exits
                    (make-progn-form (remove-if (of-type 'go-form) result))
-                   (or (make-progn-form (remove-if (of-type 'go-form) result))
-                       (make-instance 'constant-form :value nil)))))))
+                   (make-instance 'constant-form :value nil))))))
 
   (:method ((ast go-tag-form))
     ast)
@@ -422,7 +433,7 @@
 
   (:method ((ast lexical-variable-reference-form))
     (bind ((value (variable-binding (name-of ast))))
-      (if (eq :unbound value)
+      (if (eq +unbound-variable+ value)
           ast
           (if (may-do-side-effect? value)
               ast
@@ -430,7 +441,7 @@
 
   (:method ((ast free-variable-reference-form))
     (bind ((value (variable-binding (name-of ast))))
-      (if (eq :unbound value)
+      (if (eq +unbound-variable+ value)
           ast
           (if (may-do-side-effect? value)
               ast

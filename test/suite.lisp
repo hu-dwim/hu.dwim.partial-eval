@@ -6,4 +6,4 @@
 
 (in-package :hu.dwim.partial-eval.test)
 
-(defsuite* (test :in root-suite))
+(def suite* (test :in root-suite))

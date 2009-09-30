@@ -16,6 +16,11 @@
   :depends-on (:hu.dwim.def+hu.dwim.stefil
                :hu.dwim.partial-eval)
   :components ((:module "test"
-                :components ((:file "package")
-                             (:file "suite" :depends-on ("package"))
-                             (:file "partial-eval" :depends-on ("suite"))))))
+                :components ((:file "integer-power" :depends-on ("suite"))
+                             (:file "list-append" :depends-on ("suite"))
+                             (:file "make-instance" :depends-on ("suite"))
+                             (:file "match-simple-regexp" :depends-on ("suite"))
+                             (:file "package")
+                             (:file "special-form" :depends-on ("suite"))
+                             (:file "string-compare" :depends-on ("suite"))
+                             (:file "suite" :depends-on ("package"))))))
