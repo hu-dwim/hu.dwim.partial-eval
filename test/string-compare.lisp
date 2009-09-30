@@ -35,19 +35,15 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer string-compare-with-loop ()
+(def layer string-compare-with-loop-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in string-compare-with-loop ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) '(length))))
-
-(def layered-method inline-function-call? :in string-compare-with-loop ((ast free-application-form))
+(def layered-method inline-function-call? :in string-compare-with-loop-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(string-compare-with-loop))))
 
 (def test test/string-compare-with-loop/partial-eval ()
-  (is (equal (partial-eval '(string-compare-with-loop "he" text) :layer 'string-compare-with-loop)
+  (is (equal (partial-eval '(string-compare-with-loop "he" text) :layer 'string-compare-with-loop-layer)
              '(if (= 2 (length text))
                (block nil
                  (if (char= #\h (aref text 0))
@@ -90,17 +86,13 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer string-compare-with-recursion ()
+(def layer string-compare-with-recursion-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in string-compare-with-recursion ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) '(length))))
-
-(def layered-method inline-function-call? :in string-compare-with-recursion ((ast free-application-form))
+(def layered-method inline-function-call? :in string-compare-with-recursion-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(string-compare-with-recursion))))
 
 (def test test/string-compare-with-recursion/partial-eval ()
-  (is (equal (partial-eval '(string-compare-with-recursion "he" text) :layer 'string-compare-with-recursion)
+  (is (equal (partial-eval '(string-compare-with-recursion "he" text) :layer 'string-compare-with-recursion-layer)
              nil)))

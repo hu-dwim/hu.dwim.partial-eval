@@ -12,7 +12,7 @@
 (def suite* (test/integer-power-with-loop :in test))
 
 (def function integer-power-with-loop (base exponent)
-  "The usual power function with integer EXPONENT."
+  "A simple power function with non-negative integer EXPONENT."
   (loop
      :with result = 1
      :repeat exponent
@@ -32,17 +32,29 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer integer-power-with-loop ()
+(def layer integer-power-with-loop-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in integer-power-with-loop ((ast free-application-form))
+(def layered-method eval-function-call? :in integer-power-with-loop-layer ((ast free-application-form))
   (or (call-next-method)
-      (member (operator-of ast) '(<= - ceiling))))
+      (member (operator-of ast) '(ceiling))))
 
-(def layered-method inline-function-call? :in integer-power-with-loop ((ast free-application-form))
+(def layered-method inline-function-call? :in integer-power-with-loop-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(integer-power-with-loop))))
 
 (def test test/integer-power-with-loop/partial-eval ()
-  (is (equal (partial-eval '(integer-power-with-loop base 4) :layer 'integer-power-with-loop)
-             '(* base (* base (* base (* base 1)))))))
+  (with-active-layers (integer-power-with-loop-layer)
+    (is (equal 1 (partial-eval '(integer-power-with-loop base 0))))
+    (is (equal '(* base 1)
+               (partial-eval '(integer-power-with-loop base 1))))
+    (is (equal '(* base (* base (* base (* base 1))))
+               (partial-eval '(integer-power-with-loop base 4))))
+    (is (equal 8
+               (eval `(bind ((base 2)
+                             (exponent 3))
+                        ,(partial-eval '(integer-power-with-loop 2 exponent))))))
+    (is (equal 8
+               (eval `(bind ((base 2)
+                             (exponent 3))
+                        ,(partial-eval '(integer-power-with-loop base exponent))))))))

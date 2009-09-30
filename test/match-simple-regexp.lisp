@@ -71,17 +71,13 @@ Returns the position in TEXT specifying the next character that was not matched 
 ;;;;;;
 ;;; partial-eval
 
-(def layer match-simple-regexp-with-recursion ()
+(def layer match-simple-regexp-with-recursion-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in match-simple-regexp-with-recursion ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) nil)))
-
-(def layered-method inline-function-call? :in match-simple-regexp-with-recursion ((ast free-application-form))
+(def layered-method inline-function-call? :in match-simple-regexp-with-recursion-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(match-simple-regexp-with-recursion))))
 
 (def test test/match-simple-regexp-with-recursion/partial-eval ()
-  (is (equal (partial-eval '(match-simple-regexp-with-recursion "a(ab)*b" text) :layer 'match-simple-regexp-with-recursion)
+  (is (equal (partial-eval '(match-simple-regexp-with-recursion "a(ab)*b" text) :layer 'match-simple-regexp-with-recursion-layer)
              nil)))

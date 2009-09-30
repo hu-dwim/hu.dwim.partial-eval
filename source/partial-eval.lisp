@@ -55,11 +55,18 @@
 ;;;;;;
 ;;; Customization points
 
+(def (layer e) standard-partial-eval-layer ()
+  ())
+
 (def (layered-function e) eval-function-call? (ast)
   (:documentation "Returns TRUE if the function call should be evaluated at partial eval time, FALSE otherwise.")
 
   (:method ((ast free-application-form))
-    (member (operator-of ast) '(eq eql not null car cdr consp eql first second third fourth getf))))
+    #f)
+
+  (:method :in standard-partial-eval-layer ((ast free-application-form))
+    (or (call-next-method)
+        (member (operator-of ast) '(eq eql not null car cdr consp first second third fourth length < <= = => > - + * /)))))
 
 (def (layered-function e) inline-function-call? (ast)
   (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
@@ -329,7 +336,7 @@
             ((block-referenced? ast evaluated-body)
              (make-instance 'block-form
                             :name (name-of ast)
-                            :body (body-of evaluated-body)))
+                            :body (list evaluated-body)))
             (t evaluated-body))))
 
   (:method ((ast return-from-form))
@@ -341,27 +348,24 @@
     (iter (with body = ast)
           (for count :from 0)
           (when (= count 10)
-            (break "Too many unrolling of tagbody go forms, giving up and returning original loop")
             (return ast))
           (bind ((evaluated-body (partial-eval-implicit-progn-body body))
-                 (non-local-exits (remove-if-not (lambda (non-local-exit)
-                                                   (and (typep non-local-exit 'go-form)
-                                                        (eq ast (enclosing-tagbody-of non-local-exit))))
-                                                 (collect-potential-non-local-exits evaluated-body))))
+                 (non-local-exits (collect-potential-non-local-exits evaluated-body)))
             (if (typep evaluated-body 'progn-form)
                 (appending (body-of evaluated-body) :into result)
                 (collect evaluated-body :into result))
             (when (and (length= 1 non-local-exits)
+                       (typep (first non-local-exits) 'go-form)
                        (eq ast (enclosing-tagbody-of (first non-local-exits))))
               (setf body (jump-target-of (first non-local-exits)))
-              ;; (break "~A" (princ-to-string (unwalk-form (make-progn-form result))))
               (when body
                 (next-iteration)))
-            ;; TODO: return tagbody-form when cannot be fully unrolled
             (return
-              (aif non-local-exits
-                   (make-progn-form (remove-if (of-type 'go-form) result))
-                   (make-instance 'constant-form :value nil))))))
+              (if non-local-exits
+                  (if (length= 1 non-local-exits)
+                      (make-progn-form (remove-if (of-type 'go-form) result))
+                      ast)
+                  (make-instance 'constant-form :value nil))))))
 
   (:method ((ast go-tag-form))
     ast)
@@ -468,7 +472,7 @@
              ;; TODO: should check assumptions in *environment*, because we may already have the return value there
              ;;       or we can infer the return value from the assumptions
              (partial-eval.debug "Immediately evaluating function call to ~A with arguments ~A" operator arguments)
-             ;; TODO: this assumes the function do not change, let the user decide
+             ;; TODO: this assumes the function does not change, let the user decide
              (prog1-bind value
                  (make-instance 'constant-form
                                 :value (apply operator (mapcar (lambda (argument)
@@ -491,7 +495,9 @@
                                       :operator operator
                                       :arguments arguments))
                  (give-up nil ast))))
-            (t ast))))
+            (t (make-instance 'free-application-form
+                              :operator operator
+                              :arguments arguments)))))
 
   (:method ((ast multiple-value-call-form))
     (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))
@@ -523,7 +529,7 @@
   (:method ((ast the-form))
     (%partial-eval (value-of ast))))
 
-(def (function e) partial-eval (form &key (environment (make-environment)) layer)
+(def (function e) partial-eval (form &key (environment (make-environment)) (layer 'standard-partial-eval-layer))
   "The function PARTIAL-EVAL takes a lisp FORM and returns another lisp FORM. The resulting form should,
 in all possible circumstances, produce the same return value, the same side effects in the same order,
 and the same non local exits, as the original FORM would have produced. The ENVIRONMENT parameter specifies

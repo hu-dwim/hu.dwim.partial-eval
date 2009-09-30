@@ -17,6 +17,8 @@
 (def test test/special-form/if ()
   (is (equal 1 (partial-eval '(if t 1 2))))
   (is (equal 2 (partial-eval '(if nil 1 2))))
+  (is (equal 'c (partial-eval '(if t c 1))))
+  (is (equal 'c (partial-eval '(if nil 1 c))))
   (is (equal '(if c 1 2) (partial-eval '(if c 1 2))))
   (is (equal '(if c 1 2) (partial-eval '(if (progn c) (progn 1) (progn 2))))))
 
@@ -40,9 +42,13 @@
 ;;; return-from
 
 (def test test/special-form/return-from ()
-  (is (equal t (partial-eval '(block nil (return-from nil t)))))
-  (is (equal t (partial-eval '(block nil (return-from nil t) (print 1)))))
-  (is (equal t (partial-eval '(block nil (return-from nil t) (error 1))))))
+  (is (equal 1 (partial-eval '(block nil (return-from nil 1)))))
+  (is (equal 1 (partial-eval '(block nil (return-from nil 1) (print 2)))))
+  (is (equal 1 (partial-eval '(block nil (return-from nil 1) (error 2)))))
+  (is (equal 1 (partial-eval '(block nil
+                               (let ((result 1))
+                                 (tagbody
+                                    (return-from nil result))))))))
 
 ;;;;;;
 ;;; tagbody
@@ -65,7 +71,27 @@
                                  (go :begin)
                                  :middle
                                  (go :end)
-                                 :end)))))
+                                 :end))))
+  (bind ((infinte-loop '(tagbody
+                         :begin
+                         (go :begin))))
+    (is (equal infinte-loop (partial-eval infinte-loop))))
+  (bind ((undecidable-loop '(tagbody
+                             :begin
+                             (if a
+                                 (go :end)
+                                 (go :begin))
+                             :end
+                             nil)))
+    (is (equal undecidable-loop (partial-eval undecidable-loop))))
+  (is (equal nil (partial-eval '(let ((repeat 3))
+                                 (tagbody
+                                  :begin
+                                    (if (<= repeat 0)
+                                        (go :end)
+                                        (setq repeat (- repeat 1)))
+                                    (go :begin)
+                                  :end))))))
 
 ;;;;;;
 ;;; let
@@ -79,5 +105,29 @@
 ;;; setq
 
 (def test test/special-form/setq ()
-  (is (equal t (partial-eval '(let ((x nil)) (setq x t)))))
-  (is (equal '(setq x t) (partial-eval '(setq x t)))))
+  (is (equal 1 (partial-eval '(let ((x nil)) (setq x 1)))))
+  (is (equal 1 (partial-eval '(setq x 1)))))
+
+;;;;;;
+;;; complex
+
+(def test test/special-form/complex ()
+  (bind ((undecidable-non-local-exit '(block nil
+                                       (let* ((r 1))
+                                         (tagbody
+                                          :begin
+                                            (if c
+                                                (go :end)
+                                                (go :begin))
+                                          :end
+                                            (return-from nil r))))))
+    (partial-eval undecidable-non-local-exit)))
+
+
+(def test test/special-form/xxx ()
+  (partial-eval '(let ((base 2)
+                       (result nil))
+                  (tagbody
+                   :begin
+                     (setq result base)
+                     (go :begin)))))

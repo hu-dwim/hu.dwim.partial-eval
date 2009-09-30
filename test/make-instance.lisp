@@ -17,19 +17,15 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer standard-class-without-slots/layer ()
+(def layer standard-class-without-slots-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in standard-class-without-slots/layer ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) nil)))
-
-(def layered-method inline-function-call? :in standard-class-without-slots/layer ((ast free-application-form))
+(def layered-method inline-function-call? :in standard-class-without-slots-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(standard-class-without-slots))))
 
 (def test test/standard-class-without-slots/partial-eval ()
-  (is (equal (partial-eval '(make-instance initialize-instance allocate-instance) :layer 'standard-class-without-slots/layer)
+  (is (equal (partial-eval '(make-instance initialize-instance allocate-instance) :layer 'standard-class-without-slots-layer)
              nil)))
 
 ;;;;;;
@@ -44,17 +40,13 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer standard-class-with-slots/layer ()
+(def layer standard-class-with-slots-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in standard-class-with-slots/layer ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) nil)))
-
-(def layered-method inline-function-call? :in standard-class-with-slots/layer ((ast free-application-form))
+(def layered-method inline-function-call? :in standard-class-with-slots-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(make-instance initialize-instance allocate-instance))))
 
 (def test test/standard-class-with-slots/partial-eval ()
-  (is (equal (partial-eval '(make-instance 'standard-class-with-slots) :layer 'standard-class-with-slots/layerp)
+  (is (equal (partial-eval '(make-instance 'standard-class-with-slots) :layer 'standard-class-with-slots-layer)
              nil)))

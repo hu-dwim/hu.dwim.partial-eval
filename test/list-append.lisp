@@ -30,17 +30,13 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer list-append-with-recursion ()
+(def layer list-append-with-recursion-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in list-append-with-recursion ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) '(car cdr))))
-
-(def layered-method inline-function-call? :in list-append-with-recursion ((ast free-application-form))
+(def layered-method inline-function-call? :in list-append-with-recursion-layer ((ast free-application-form))
   (or (call-next-method)
       (member (operator-of ast) '(list-append-with-recursion))))
 
 (def test test/list-append-with-recursion/partial-eval ()
-  (is (equal (partial-eval '(list-append-with-recursion '(1 2 3) list) :layer 'list-append-with-recursion)
+  (is (equal (partial-eval '(list-append-with-recursion '(1 2 3) list) :layer 'list-append-with-recursion-layer)
              '(cons 1 (cons 2 (cons 3 list))))))
