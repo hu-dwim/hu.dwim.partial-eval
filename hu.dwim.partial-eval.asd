@@ -15,14 +15,15 @@
   :description "Extensible partial evaluator"
   :depends-on (:hu.dwim.common-lisp
                :hu.dwim.def+contextl
-               :hu.dwim.def+hu.dwim.logger
                :hu.dwim.defclass-star
+               :hu.dwim.logger
                :hu.dwim.syntax-sugar
                :hu.dwim.util
                :hu.dwim.walker
                :swank)
   :components ((:module "source"
                 :components ((:file "configuration" :depends-on ("package"))
+                             (:file "logger" :depends-on ("configuration"))
                              (:file "source" :depends-on ("configuration"))
                              (:file "package")
                              (:file "partial-eval" :depends-on ("source"))))))
