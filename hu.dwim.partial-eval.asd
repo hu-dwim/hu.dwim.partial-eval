@@ -26,4 +26,4 @@
                              (:file "logger" :depends-on ("configuration"))
                              (:file "source" :depends-on ("configuration"))
                              (:file "package")
-                             (:file "partial-eval" :depends-on ("source"))))))
+                             (:file "partial-eval" :depends-on ("source" "logger"))))))

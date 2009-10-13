@@ -66,12 +66,33 @@
 
   (:method :in standard-partial-eval-layer ((ast free-application-form))
     (or (call-next-method)
-        (member (operator-of ast) '(eq eql not null car cdr consp first second third fourth length char= < <= = >= > - + * / 1+ 1-)))))
+        (member (operator-of ast) '(eq eql not null atom car cdr consp first second third fourth length getf char= zerop < <= = >= > - + * / 1+ 1-)))))
 
 (def (layered-function e) inline-function-call? (ast)
   (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
 
   (:method ((ast free-application-form))
+    #f))
+
+(def (layered-function e) partial-eval-function-call (operator ast arguments)
+  (:method ((ast free-application-form) operator arguments)
+    (partial-eval.debug "Leaving function call to ~A intact" operator)
+    (make-instance 'free-application-form
+                   :operator operator
+                   :arguments arguments))
+
+  (:method ((ast free-application-form) (operator (eql 'apply)) arguments)
+    (when (and (typep (first arguments) 'free-function-object-form)
+               (typep (last-elt arguments) 'constant-form))
+      (%partial-eval (make-instance 'free-application-form
+                                    :operator (name-of (first arguments))
+                                    :arguments (append (rest (butlast arguments))
+                                                       (mapcar (lambda (value)
+                                                                 (make-instance 'constant-form :value value))
+                                                               (value-of (last-elt arguments)))))))))
+
+(def (layered-function e) lookup-variable-value? (name)
+  (:method (name)
     #f))
 
 (def (layered-function e) may-do-side-effect? (ast)
@@ -249,11 +270,18 @@
 (def function partial-eval-lambda-list (argument-definitions argument-values)
   (when (or argument-definitions
             argument-values)
-    (bind ((argument-names (mapcar 'name-of argument-definitions))
-           (evaluated-values (eval `(bind ((,@(cdadr (unwalk-form (make-instance 'lambda-function-form
-                                                                                 :arguments argument-definitions
-                                                                                 :body nil)))
-                                              ,(list 'quote (mapcar '%partial-eval argument-values))))
+    (bind ((argument-names (mappend (lambda (argument-definition)
+                                      (typecase argument-definition
+                                        (optional-function-argument-form (list (name-of argument-definition)
+                                                                               (supplied-p-parameter argument-definition)))
+                                        (function-argument-form (list (name-of argument-definition)))))
+                                    argument-definitions))
+           ;; TODO: remove this eval and use alexandria
+           (evaluated-values (eval `(destructuring-bind
+                                          ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
+                                                                               :arguments argument-definitions
+                                                                               :body nil)))
+                                        ,(list 'quote (mapcar '%partial-eval argument-values))
                                       (list ,@argument-names)))))
       (extend-bindings (mapcar (lambda (name value)
                                  (cons name
@@ -473,7 +501,10 @@
               value))))
 
   (:method ((ast special-variable-reference-form))
-    ast)
+    (bind ((name (name-of ast)))
+      (if (lookup-variable-value? name)
+          (make-instance 'constant-form :value (symbol-value name))
+          ast)))
 
   (:method ((ast walked-lexical-function-object-form))
     ast)
@@ -509,18 +540,13 @@
                        (bind ((*environment* (clone-environment))
                               (lambda-ast (walk-form source)))
                          (partial-eval.debug "Inlining function call to ~A ~A" operator source)
-                         ;;(break "Partial evaluating function call to ~A with arguments ~A" operator arguments)
                          (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
                          (partial-eval-implicit-progn-body lambda-ast))
                        (make-instance 'free-application-form
                                       :operator operator
                                       :arguments arguments))
                  (give-up nil ast))))
-            (t
-             (partial-eval.debug "Leaving function call to ~A intact" operator)
-             (make-instance 'free-application-form
-                            :operator operator
-                            :arguments arguments)))))
+            (t (partial-eval-function-call ast operator arguments)))))
 
   (:method ((ast multiple-value-call-form))
     (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))

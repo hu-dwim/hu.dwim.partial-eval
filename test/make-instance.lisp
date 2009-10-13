@@ -20,14 +20,24 @@
 (def layer standard-class-without-slots-layer (standard-partial-eval-layer)
   ())
 
+(def layered-method eval-function-call? :in standard-class-without-slots-layer ((ast free-application-form))
+  (or (call-next-method)
+      (member (operator-of ast)
+              '(list* typep find-class class-finalized-p finalize-inheritance class-default-initargs class-of
+                sb-pcl::class-wrapper sb-kernel:layout-length))))
+
 (def layered-method inline-function-call? :in standard-class-without-slots-layer ((ast free-application-form))
   (or (call-next-method)
-      (member (operator-of ast) '(standard-class-without-slots))))
+      (member (operator-of ast)
+              '(make-instance allocate-instance #+nil initialize-instance
+                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code))))
+
+(def layered-method lookup-variable-value? :in standard-class-without-slots-layer ((name (eql 'sb-pcl::**boot-state**)))
+  #t)
 
 (def test test/standard-class-without-slots/partial-eval ()
-  #+nil
   (with-active-layers (standard-class-without-slots-layer)
-    (is (equal (partial-eval '(make-instance initialize-instance allocate-instance))
+    (is (equal (partial-eval '(make-instance 'standard-class-without-slots))
                nil))))
 
 ;;;;;;
@@ -42,15 +52,10 @@
 ;;;;;;
 ;;; partial-eval
 
-(def layer standard-class-with-slots-layer (standard-partial-eval-layer)
+(def layer standard-class-with-slots-layer (standard-class-without-slots-layer)
   ())
 
-(def layered-method inline-function-call? :in standard-class-with-slots-layer ((ast free-application-form))
-  (or (call-next-method)
-      (member (operator-of ast) '(make-instance initialize-instance allocate-instance))))
-
 (def test test/standard-class-with-slots/partial-eval ()
-  #+nil
   (with-active-layers (standard-class-with-slots-layer)
     (is (equal (partial-eval '(make-instance 'standard-class-with-slots))
                nil))))

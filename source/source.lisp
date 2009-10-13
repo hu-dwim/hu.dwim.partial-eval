@@ -174,13 +174,18 @@
            (form (find-source function)))
       (cond ((and (eq 'defun (first form))
                   (eq function-name (second form)))
-             `(lambda ,(caddr form)
-                ,@(cdddr form)))
+             ;; TODO: use walker
+             (bind (((:values body declarations nil) (parse-body (cdddr form) :documentation #t)))
+               `(lambda ,(caddr form)
+                  ,@declarations
+                  ,@body)))
             ((and (eq 'def (first form))
                   (eq 'function (second form))
                   (eq function-name (third form)))
-             `(lambda ,(cadddr form)
-                ,@(cddddr form)))
+             (bind (((:values body declarations nil) (parse-body (cddddr form) :documentation #t)))
+               `(lambda ,(cadddr form)
+                  ,@declarations
+                  ,@body)))
             (t nil))))
 
   (:method ((function generic-function))
