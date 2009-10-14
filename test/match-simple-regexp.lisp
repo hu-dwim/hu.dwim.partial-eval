@@ -74,9 +74,9 @@ Returns the position in TEXT specifying the next character that was not matched 
 (def layer match-simple-regexp-with-recursion-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method inline-function-call? :in match-simple-regexp-with-recursion-layer ((ast free-application-form))
+(def layered-method inline-function-call? :in match-simple-regexp-with-recursion-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast) '(match-simple-regexp-with-recursion))))
+      (member operator '(match-simple-regexp-with-recursion))))
 
 (def test test/match-simple-regexp-with-recursion/partial-eval ()
   #+nil

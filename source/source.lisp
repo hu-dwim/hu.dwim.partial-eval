@@ -39,17 +39,14 @@
                                      (read stream #f stream)))
                        (until (eq form stream))
                        (when (eq 'in-package (first form))
-                         (setf *package* (find-package (second form))))
+                         (setf *package* (find-package (second form)))
+                         (awhen (cdr (assoc (package-name *package*) swank:*readtable-alist* :test 'string=))
+                           (setf *readtable* it)))
                        (when (= first-index index)
                          (return form)))))))
       (handler-bind ((package-error #'continue))
         (setf (fdefinition 'find-package) original-find-package)
         (delete-package temporary-package)))))
-
-(def function find-source (fdefinition)
-  (or (gethash fdefinition *sources*)
-      (setf (gethash fdefinition *sources*)
-            (read-source-form fdefinition))))
 
 ;;;;;;
 ;;; Generic function
@@ -65,7 +62,7 @@
 
 (def function make-generic-method-lambda-form (method)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-pcl:method-lambda-list method)))
-         (form (find-source method)))
+         (form (read-source-form method)))
     (with-unique-names (arguments methods)
       `(lambda (,arguments ,methods)
          (bind ((,(append required-arguments other-arguments?) ,arguments))
@@ -166,12 +163,17 @@
 ;;; Function
 
 (def generic make-function-lambda-form (function)
+  (:method :around (function)
+    (or (gethash function *sources*)
+        (setf (gethash function *sources*)
+              (call-next-method function))))
+
   (:method ((name symbol))
     (make-function-lambda-form (fdefinition name)))
 
   (:method ((function function))
     (bind (((:values nil nil function-name) (function-lambda-expression function))
-           (form (find-source function)))
+           (form (read-source-form function)))
       (cond ((and (eq 'defun (first form))
                   (eq function-name (second form)))
              ;; TODO: use walker

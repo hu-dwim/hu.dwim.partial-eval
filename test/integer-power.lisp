@@ -35,13 +35,13 @@
 (def layer integer-power-with-loop-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in integer-power-with-loop-layer ((ast free-application-form))
+(def layered-method eval-function-call? :in integer-power-with-loop-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast) '(ceiling))))
+      (member operator '(ceiling))))
 
-(def layered-method inline-function-call? :in integer-power-with-loop-layer ((ast free-application-form))
+(def layered-method inline-function-call? :in integer-power-with-loop-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast) '(integer-power-with-loop))))
+      (member operator '(integer-power-with-loop))))
 
 (def test test/integer-power-with-loop/partial-eval ()
   (with-active-layers (integer-power-with-loop-layer)

@@ -33,9 +33,9 @@
 (def layer list-append-with-recursion-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method inline-function-call? :in list-append-with-recursion-layer ((ast free-application-form))
+(def layered-method inline-function-call? :in list-append-with-recursion-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast) '(list-append-with-recursion))))
+      (member operator '(list-append-with-recursion))))
 
 (def test test/list-append-with-recursion/partial-eval ()
   (with-active-layers (list-append-with-recursion-layer)

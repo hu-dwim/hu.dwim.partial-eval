@@ -58,23 +58,23 @@
 (def (layer e) standard-partial-eval-layer ()
   ())
 
-(def (layered-function e) eval-function-call? (ast)
+(def (layered-function e) eval-function-call? (ast operator arguments)
   (:documentation "Returns TRUE if the function call should be evaluated at partial eval time, FALSE otherwise.")
 
-  (:method ((ast free-application-form))
+  (:method ((ast free-application-form) operator arguments)
     #f)
 
-  (:method :in standard-partial-eval-layer ((ast free-application-form))
+  (:method :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
     (or (call-next-method)
-        (member (operator-of ast) '(eq eql not null atom car cdr consp first second third fourth length getf char= zerop < <= = >= > - + * / 1+ 1-)))))
+        (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= zerop < <= = >= > - + * / 1+ 1-)))))
 
-(def (layered-function e) inline-function-call? (ast)
+(def (layered-function e) inline-function-call? (ast operator arguments)
   (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
 
-  (:method ((ast free-application-form))
+  (:method ((ast free-application-form) operator arguments)
     #f))
 
-(def (layered-function e) partial-eval-function-call (operator ast arguments)
+(def (layered-function e) partial-eval-function-call (ast operator arguments)
   (:method ((ast free-application-form) operator arguments)
     (partial-eval.debug "Leaving function call to ~A intact" operator)
     (make-instance 'free-application-form
@@ -134,7 +134,7 @@
     #f)
 
   (:method ((ast free-application-form))
-    (not (eval-function-call? ast))))
+    (not (eval-function-call? ast (operator-of ast) (arguments-of ast)))))
 
 (def (layered-function e) does-side-effect? (ast)
   (:method ((ast constant-form))
@@ -161,6 +161,9 @@
   (:method ((ast go-form))
     (list ast))
 
+  (:method ((ast the-form))
+    (collect-potential-non-local-exits (value-of ast)))
+
   (:method ((ast variable-reference-form))
     nil)
 
@@ -168,7 +171,10 @@
     nil)
 
   (:method ((ast setq-form))
-    nil))
+    nil)
+
+  (:method ((ast walked-lexical-application-form))
+    (collect-potential-non-local-exits (code-of ast))))
 
 (def (layered-function e) may-do-non-local-exit? (ast)
   (:method ((ast walked-form))
@@ -200,7 +206,7 @@
     #f)
 
   (:method ((ast free-application-form))
-    (not (eval-function-call? ast))))
+    (not (eval-function-call? ast (operator-of ast) (arguments-of ast)))))
 
 (def (layered-function e) does-non-local-exit? (ast)
   (:method ((ast walked-form))
@@ -519,7 +525,7 @@
   (:method ((ast free-application-form))
     (bind ((operator (operator-of ast))
            (arguments (mapcar #'%partial-eval (arguments-of ast))))
-      (cond ((and (eval-function-call? ast)
+      (cond ((and (eval-function-call? ast operator arguments)
                   (every (of-type '(or constant-form free-function-object-form)) arguments))
              ;; TODO: should check assumptions in *environment*, because we may already have the return value there
              ;;       or we can infer the return value from the assumptions
@@ -533,7 +539,7 @@
                                                                    (free-function-object-form (name-of argument))))
                                                                arguments)))
                (partial-eval.debug "Evaluating function call returned ~A" value)))
-            ((inline-function-call? ast)
+            ((inline-function-call? ast operator arguments)
              (bind ((source (make-function-lambda-form operator)))
                (restart-case
                    (if source

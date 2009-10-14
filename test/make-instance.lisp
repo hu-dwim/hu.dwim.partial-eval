@@ -20,17 +20,18 @@
 (def layer standard-class-without-slots-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method eval-function-call? :in standard-class-without-slots-layer ((ast free-application-form))
+(def layered-method eval-function-call? :in standard-class-without-slots-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast)
-              '(list* typep find-class class-finalized-p finalize-inheritance class-default-initargs class-of
-                sb-pcl::class-wrapper sb-kernel:layout-length))))
+      (member operator
+              '(list rplacd list* ; TODO: eliminate this three
+                typep find-class class-finalized-p finalize-inheritance class-default-initargs class-of class-slots
+                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code
+                sb-pcl::class-wrapper sb-kernel:layout-length sb-kernel::classoid-of))))
 
-(def layered-method inline-function-call? :in standard-class-without-slots-layer ((ast free-application-form))
+(def layered-method inline-function-call? :in standard-class-without-slots-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member (operator-of ast)
-              '(make-instance allocate-instance #+nil initialize-instance
-                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code))))
+      (member operator
+              '(make-instance allocate-instance initialize-instance shared-initialize))))
 
 (def layered-method lookup-variable-value? :in standard-class-without-slots-layer ((name (eql 'sb-pcl::**boot-state**)))
   #t)
