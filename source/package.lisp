@@ -9,7 +9,7 @@
 (defpackage :hu.dwim.partial-eval
   (:use :contextl
         :hu.dwim.asdf
-        :hu.dwim.common-lisp
+        :hu.dwim.common
         :hu.dwim.def
         :hu.dwim.defclass-star
         :hu.dwim.logger

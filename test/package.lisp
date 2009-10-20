@@ -8,7 +8,7 @@
 
 (defpackage :hu.dwim.partial-eval.test
   (:use :contextl
-        :hu.dwim.common-lisp
+        :hu.dwim.common
         :hu.dwim.defclass-star
         :hu.dwim.def
         :hu.dwim.partial-eval
