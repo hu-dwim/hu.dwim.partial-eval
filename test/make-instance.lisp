@@ -23,7 +23,7 @@
 (def layered-method eval-function-call? :in standard-class-without-slots-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
       (member operator
-              '(list rplacd list* ; TODO: eliminate this three
+              '(list rplacd list* ; TODO: eliminate these
                 typep find-class class-finalized-p finalize-inheritance class-default-initargs class-of class-slots
                 sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code
                 sb-pcl::class-wrapper sb-kernel:layout-length sb-kernel::classoid-of))))
