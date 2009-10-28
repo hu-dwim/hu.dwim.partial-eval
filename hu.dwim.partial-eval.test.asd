@@ -19,6 +19,7 @@
                :hu.dwim.partial-eval)
   :components ((:module "test"
                 :components ((:file "generic-function" :depends-on ("suite"))
+                             (:file "function" :depends-on ("suite"))
                              (:file "integer-power" :depends-on ("suite"))
                              (:file "list-append" :depends-on ("suite"))
                              (:file "make-instance" :depends-on ("suite"))
