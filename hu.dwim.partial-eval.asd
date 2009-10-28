@@ -25,5 +25,6 @@
                 :components ((:file "configuration" :depends-on ("package"))
                              (:file "logger" :depends-on ("configuration"))
                              (:file "source" :depends-on ("configuration"))
+                             (:file "standard" :depends-on ("partial-eval"))
                              (:file "package")
                              (:file "partial-eval" :depends-on ("source" "logger"))))))

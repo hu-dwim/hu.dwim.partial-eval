@@ -55,18 +55,11 @@
 ;;;;;;
 ;;; Customization points
 
-(def (layer e) standard-partial-eval-layer ()
-  ())
-
 (def (layered-function e) eval-function-call? (ast operator arguments)
   (:documentation "Returns TRUE if the function call should be evaluated at partial eval time, FALSE otherwise.")
 
   (:method ((ast free-application-form) operator arguments)
-    #f)
-
-  (:method :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
-    (or (call-next-method)
-        (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= zerop < <= = >= > - + * / 1+ 1-)))))
+    #f))
 
 (def (layered-function e) inline-function-call? (ast operator arguments)
   (:documentation "Returns TRUE if the function call should be inlined at partial eval time, FALSE otherwise.")
@@ -79,38 +72,7 @@
     (partial-eval.debug "Leaving function call to ~A intact" operator)
     (make-instance 'free-application-form
                    :operator operator
-                   :arguments arguments))
-
-  (:method ((ast free-application-form) (operator (eql 'apply)) arguments)
-    (if (and (typep (first arguments) 'free-function-object-form)
-             (typep (last-elt arguments) 'constant-form))
-        (%partial-eval (make-instance 'free-application-form
-                                      :operator (name-of (first arguments))
-                                      :arguments (append (rest (butlast arguments))
-                                                         (mapcar (lambda (value)
-                                                                   (make-instance 'constant-form :value value))
-                                                                 (value-of (last-elt arguments))))))
-        (call-next-method)))
-
-  (:method ((ast free-application-form) (operator (eql 'funcall)) arguments)
-    (bind ((function (first arguments)))
-      (typecase function
-        (constant-form
-         (%partial-eval (make-instance 'free-application-form
-                                       :operator (value-of (first arguments))
-                                       :arguments (rest arguments))))
-        (lexical-function-object-form
-         (%partial-eval (make-instance 'walked-lexical-application-form
-                                       :operator (name-of (first arguments))
-                                       :code (make-instance 'lambda-function-form
-                                                            :body (body-of (definition-of function))
-                                                            :arguments (rest arguments))
-                                       :arguments (arguments-of (definition-of function)))))
-        (function-object-form
-         (%partial-eval (make-instance 'lambda-application-form
-                                       :operator (name-of (first arguments))
-                                       :arguments (rest arguments))))
-        (t (call-next-method))))))
+                   :arguments arguments)))
 
 (def (layered-function e) lookup-variable-value? (name)
   (:method (name)
