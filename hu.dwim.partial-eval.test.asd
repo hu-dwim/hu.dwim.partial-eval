@@ -15,6 +15,7 @@
   :licence "BSD / Public domain"
   :description "Test suite for hu.dwim.partial-eval"
   :depends-on (:hu.dwim.def+hu.dwim.stefil
+               :hu.dwim.stefil+swank
                :hu.dwim.partial-eval)
   :components ((:module "test"
                 :components ((:file "generic-function" :depends-on ("suite"))
