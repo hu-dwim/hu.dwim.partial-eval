@@ -68,7 +68,7 @@
          (bind ((,(append required-arguments other-arguments?) ,arguments))
            ,@(nthcdr (1+ (position-if #'consp form)) form))))))
 
-(def function make-generic-function-discriminating-form (function arguments-list required-arguments)
+(def function make-generic-function-discriminating-form (function arguments-list)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-mop:generic-function-lambda-list function)))
          (sorted-applicable-methods (sb-pcl::sort-applicable-methods
                                      (sb-pcl::compute-precedence (sb-mop:generic-function-lambda-list function)
@@ -178,4 +178,4 @@
       (with-unique-names (arguments-list)
         `(lambda (,@required-arguments ,@(when rest-argument `(&rest ,rest-argument)))
            (bind ((,arguments-list (list* ,@required-arguments ,rest-argument)))
-             ,(make-generic-function-discriminating-form function arguments-list required-arguments)))))))
+             ,(make-generic-function-discriminating-form function arguments-list)))))))

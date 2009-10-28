@@ -82,14 +82,35 @@
                    :arguments arguments))
 
   (:method ((ast free-application-form) (operator (eql 'apply)) arguments)
-    (when (and (typep (first arguments) 'free-function-object-form)
-               (typep (last-elt arguments) 'constant-form))
-      (%partial-eval (make-instance 'free-application-form
-                                    :operator (name-of (first arguments))
-                                    :arguments (append (rest (butlast arguments))
-                                                       (mapcar (lambda (value)
-                                                                 (make-instance 'constant-form :value value))
-                                                               (value-of (last-elt arguments)))))))))
+    (if (and (typep (first arguments) 'free-function-object-form)
+             (typep (last-elt arguments) 'constant-form))
+        (%partial-eval (make-instance 'free-application-form
+                                      :operator (name-of (first arguments))
+                                      :arguments (append (rest (butlast arguments))
+                                                         (mapcar (lambda (value)
+                                                                   (make-instance 'constant-form :value value))
+                                                                 (value-of (last-elt arguments))))))
+        (call-next-method)))
+
+  (:method ((ast free-application-form) (operator (eql 'funcall)) arguments)
+    (bind ((function (first arguments)))
+      (typecase function
+        (constant-form
+         (%partial-eval (make-instance 'free-application-form
+                                       :operator (value-of (first arguments))
+                                       :arguments (rest arguments))))
+        (lexical-function-object-form
+         (%partial-eval (make-instance 'walked-lexical-application-form
+                                       :operator (name-of (first arguments))
+                                       :code (make-instance 'lambda-function-form
+                                                            :body (body-of (definition-of function))
+                                                            :arguments (rest arguments))
+                                       :arguments (arguments-of (definition-of function)))))
+        (function-object-form
+         (%partial-eval (make-instance 'lambda-application-form
+                                       :operator (name-of (first arguments))
+                                       :arguments (rest arguments))))
+        (t (call-next-method))))))
 
 (def (layered-function e) lookup-variable-value? (name)
   (:method (name)
@@ -529,7 +550,7 @@
                   (every (of-type '(or constant-form free-function-object-form)) arguments))
              ;; TODO: should check assumptions in *environment*, because we may already have the return value there
              ;;       or we can infer the return value from the assumptions
-             (partial-eval.debug "Immediately evaluating function call to ~A with arguments ~A" operator arguments)
+             (partial-eval.debug "Immediately evaluating function call to ~A with constant arguments ~A" operator arguments)
              ;; TODO: this assumes the function does not change, let the user decide
              (prog1-bind value
                  (make-instance 'constant-form
