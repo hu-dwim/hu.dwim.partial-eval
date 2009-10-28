@@ -279,7 +279,7 @@
     (bind ((argument-names (mappend (lambda (argument-definition)
                                       (typecase argument-definition
                                         (optional-function-argument-form (list (name-of argument-definition)
-                                                                               (supplied-p-parameter argument-definition)))
+                                                                               (supplied-p-parameter-name-of argument-definition)))
                                         (function-argument-form (list (name-of argument-definition)))))
                                     argument-definitions))
            ;; TODO: remove this eval and use alexandria
@@ -590,10 +590,12 @@ in all possible circumstances, produce the same return value, the same side effe
 and the same non local exits, as the original FORM would have produced. The ENVIRONMENT parameter specifies
 the initial assumptions in which the form should be evaluated. The LAYER parameter provides a way to customize
 the standard partial evaluation logic to your needs."
-  (bind ((*environment* environment)
-         (contextl::*active-context* contextl::*active-context*))
-    (when layer
-      (ensure-active-layer layer))
+  (bind ((*environment* environment))
     ;; KLUDGE: shall we really ignore?
-    (with-walker-configuration (:undefined-reference-handler nil)
-      (unwalk-form (%partial-eval (walk-form form))))))
+    (with-active-layers (ignore-undefined-references)
+      (funcall-with-layer-context
+       (if layer
+           (adjoin-layer layer (current-layer-context))
+           (current-layer-context))
+       (lambda ()
+         (unwalk-form (%partial-eval (walk-form form))))))))
