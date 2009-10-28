@@ -6,4 +6,4 @@
 
 (in-package :hu.dwim.partial-eval)
 
-(def logger partial-eval () :appender (make-instance 'brief-stream-appender :stream *debug-io*))
+(def logger partial-eval ())
