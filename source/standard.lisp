@@ -13,7 +13,7 @@
   ())
 
 (def layered-method eval-function-call? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
-  (or (call-next-method)
+  (or (call-next-layered-method)
       (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= zerop < <= = >= > - + * / 1+ 1-))))
 
 
@@ -29,35 +29,35 @@
                                                        (mapcar (lambda (value)
                                                                  (make-instance 'constant-form :value value))
                                                                (value-of (last-elt arguments))))))
-      (call-next-method)))
+      (call-next-layered-method)))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'funcall)) arguments)
   (bind ((function (first arguments)))
     (typecase function
       (constant-form
        (%partial-eval (make-instance 'free-application-form
-                                     :operator (value-of (first arguments))
+                                     :operator (value-of function)
                                      :arguments (rest arguments))))
       (lexical-function-object-form
-       (%partial-eval (make-instance 'walked-lexical-application-form
-                                     :operator (name-of (first arguments))
+       (%partial-eval (make-instance 'lexical-application-form
+                                     :operator (name-of function)
                                      :code (make-instance 'lambda-function-form
                                                           :body (body-of (definition-of function))
-                                                          :arguments (rest arguments))
-                                     :arguments (arguments-of (definition-of function)))))
-      (function-object-form
-       (%partial-eval (make-instance 'lambda-application-form
-                                     :operator (name-of (first arguments))
+                                                          :arguments (arguments-of (definition-of function)))
                                      :arguments (rest arguments))))
-      (t (call-next-method)))))
+      (function-object-form
+       (%partial-eval (make-instance 'lexical-application-form
+                                     :operator (name-of function)
+                                     :code function
+                                     :arguments (rest arguments))))
+      (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'car)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
            (%partial-eval (first (arguments-of argument))))
-          (t
-           (call-next-method)))))
+          (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cdr)) arguments)
   (bind ((argument (first arguments)))
@@ -66,10 +66,9 @@
            (%partial-eval (make-instance 'free-application-form
                                          :operator 'list
                                          :arguments (cdr (arguments-of argument)))))
-          (t
-           (call-next-method)))))
+          (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list)) arguments)
   (if arguments
-      (call-next-method)
+      (call-next-layered-method)
       (make-instance 'constant-form :value nil)))

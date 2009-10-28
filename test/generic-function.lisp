@@ -7,7 +7,7 @@
 (in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
-;;; Generic function
+;;; generic-function
 
 (def suite* (test/generic-function :in test))
 
@@ -76,7 +76,7 @@
 
 (def layered-method eval-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member operator '(typep list* ; TODO: eliminate these
+      (member operator '(typep list list* ; TODO: eliminate these
                          sb-int:proper-list-of-length-p))))
 
 (def layered-method inline-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
@@ -84,7 +84,7 @@
       (member operator
               '(print-applied-method-information))))
 
-(def test test/generic-function/partial-eval ()
+(def test test/generic-function/print-applied-method-information ()
   (with-active-layers (generic-function-layer)
     (is (equal (partial-eval '(print-applied-method-information t))
                nil))

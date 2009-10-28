@@ -7,16 +7,30 @@
 (in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
-;;; Function
+;;; function
 
 (def suite* (test/function :in test))
 
 ;;;;;;
-;;; partial-eval
+;;; list
 
-(def layer function-layer (standard-partial-eval-layer)
-  ())
+(def test test/function/list ()
+  (is (equal (partial-eval '(list)) nil))
+  (is (equal (partial-eval '(list 1)) '(list 1)))
+  (is (equal (partial-eval '(car (list 1 2))) 1))
+  (is (equal (partial-eval '(car (list (cons 1 2)))) '(cons 1 2)))
+  (is (equal (partial-eval '(cdr (list 1 2))) '(list 2)))
+  (is (equal (partial-eval '(cdr (list 1))) nil)))
 
-(def test test/function/partial-eval ()
-  (with-active-layers (function-layer)
-    (is (equal (partial-eval '(funcall '+ 1 2)) 3))))
+;;;;;;
+;;; funcall
+
+(def test test/function/funcall ()
+  (is (equal (partial-eval '(funcall '+ 1 2)) 3))
+  (is (equal (partial-eval '(funcall (lambda (&rest args) 1) nil)) 1)))
+
+;;;;;;
+;;; apply
+
+(def test test/function/funcall ()
+  (is (equal (partial-eval '(apply (lambda (&rest args) 1) nil)) 1)))

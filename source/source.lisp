@@ -107,7 +107,7 @@
                                         (arguments (second form)))
                                    `(,(second method-info) ,arguments
                                       (flet ((call-next-method ()
-                                               (funcall (first ,(second arguments)) ,(first arguments) (cdr ,(second arguments)))))
+                                               (funcall (car ,(second arguments)) ,(first arguments) (cdr ,(second arguments)))))
                                         ,@(cddr form)))))
                                methods-info))
          (make-method-form-names (make-hash-table))

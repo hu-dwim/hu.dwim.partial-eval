@@ -8,8 +8,17 @@
 
 ;;;;;;
 ;;; Common Lisp special forms
+;;;
+;;; TODO: catch load-time-value eval-when locally symbol-macrolet macrolet function multiple-value-call the throw unwind-protect labels progv
 
 (def suite* (test/special-form :in test))
+
+;;;;;;
+;;; quote
+
+(def test test/special-form/quote ()
+  (is (equal 1 (partial-eval '(quote 1))))
+  (is (equal '(1 2) (partial-eval '(quote (1 2))))))
 
 ;;;;;;
 ;;; if
@@ -32,6 +41,12 @@
   (is (equal 1 (partial-eval '(progn 1))))
   (is (equal 2 (partial-eval '(progn 1 2))))
   (is (equal '(progn (print 1) 3) (partial-eval '(progn 1 (print 1) 2 3)))))
+
+;;;;;;
+;;; multiple-value-prog1
+
+(def test test/special-form/multiple-value-prog1 ()
+  (is (equal 1 (partial-eval '(multiple-value-prog1 1 2 3)))))
 
 ;;;;;;
 ;;; block
@@ -104,11 +119,27 @@
   (is (equal 2 (partial-eval '(let () 1 2)))))
 
 ;;;;;;
+;;; let*
+
+(def test test/special-form/let* ()
+  (is (equal nil (partial-eval '(let* ()))))
+  (is (equal 1 (partial-eval '(let* () 1))))
+  (is (equal 2 (partial-eval '(let* () 1 2)))))
+
+;;;;;;
 ;;; setq
 
 (def test test/special-form/setq ()
   (is (equal 1 (partial-eval '(let ((x nil)) (setq x 1)))))
   (is (equal '(setq x 1) (partial-eval '(setq x 1)))))
+
+;;;;;;
+;;; flet
+
+(def test test/special-form/flet ()
+  (is (equal 1 (partial-eval '(flet ((foo ()
+                                      1))
+                               (funcall #'foo))))))
 
 ;;;;;;
 ;;; complex

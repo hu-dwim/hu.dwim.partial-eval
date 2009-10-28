@@ -351,6 +351,12 @@
   (:method ((ast progn-form))
     (partial-eval-implicit-progn-body ast))
 
+  (:method ((ast multiple-value-prog1-form))
+    ;; KLUDGE: this does not work properly when there are side effects or non local exits in the first form
+    ;; TODO: does not return multiple-value
+    (%partial-eval (make-instance 'progn-form :body (list (partial-eval-implicit-progn-body (other-forms-of ast))
+                                                          (%partial-eval (first-form-of ast))))))
+
   (:method ((ast block-form))
     (bind ((evaluated-body (partial-eval-implicit-progn-body ast))
            (non-local-exit (does-non-local-exit? evaluated-body))
@@ -505,8 +511,7 @@
     ast)
 
   (:method ((ast lambda-function-form))
-    (partial-eval.debug "Evaluating Lambda function form ~A" ast)
-    (partial-eval-implicit-progn-body ast))
+    ast)
 
   (:method ((ast free-application-form))
     (bind ((operator (operator-of ast))
