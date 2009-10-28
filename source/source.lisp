@@ -15,7 +15,7 @@
   (clrhash *sources*))
 
 (def function read-source-form (fdefinition)
-  ;; KLUDGE: all this hassle is to workaround SBCL's bootstrapping package names
+  ;; KLUDGE: all this hassle is to workaround SBCL's bootstrapping package names, this is obviously non thread safe
   (bind ((original-find-package (fdefinition 'find-package))
          (temporary-package (make-package "TEMPORARY")))
     (unwind-protect
@@ -68,7 +68,7 @@
          (bind ((,(append required-arguments other-arguments?) ,arguments))
            ,@(nthcdr (1+ (position-if #'consp form)) form))))))
 
-(def function make-generic-function-discriminating-form (function arguments-list)
+(def function make-generic-function-discriminating-form (function arguments-list required-arguments)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-mop:generic-function-lambda-list function)))
          (sorted-applicable-methods (sb-pcl::sort-applicable-methods
                                      (sb-pcl::compute-precedence (sb-mop:generic-function-lambda-list function)
@@ -79,7 +79,9 @@
          (methods-info (mapcar (lambda (method)
                                  (list method (gensym "METHOD")))
                                sorted-applicable-methods))
-         (discrimination-net (sb-pcl::generate-discrimination-net function sorted-applicable-methods nil #f))
+         (argument-names (iter (for index :from 0 :below 10)
+                               (collect (sb-pcl::dfun-arg-symbol index))))
+         (discrimination-net (sb-pcl::generate-discrimination-net function sorted-applicable-methods nil #t))
          (effective-methods-form (map-form discrimination-net
                                            (lambda (form)
                                              (if (and (consp form)
@@ -97,7 +99,9 @@
                                                                                                  `(function ,(or (second (find method methods-info :key 'car))
                                                                                                                  method)))
                                                                                                next-methods))))
-                                                     form))))
+                                                     (if (member form argument-names)
+                                                         (elt required-arguments (position form argument-names))
+                                                         form)))))
          (method-forms (mapcar (lambda (method-info)
                                  (bind ((form (make-generic-method-lambda-form (car method-info)))
                                         (arguments (second form)))
@@ -121,13 +125,12 @@
     (declare (ignore other-arguments?))
     `(flet ,method-forms
        (flet ,make-method-forms
-         (bind ((SB-PCL::.ARG0. hu.dwim.partial-eval.test::instance))
-           ,(map-form expanded-call-methods-form
-                      (lambda (form)
-                        (if (and (consp form)
-                                 (eq 'make-method (first form)))
-                            (gethash form make-method-form-names)
-                            form))))))))
+         ,(map-form expanded-call-methods-form
+                    (lambda (form)
+                      (if (and (consp form)
+                               (eq 'make-method (first form)))
+                          (gethash form make-method-form-names)
+                          form)))))))
 
 (def function map-form (form function)
   (labels ((recurse (form)
@@ -175,4 +178,4 @@
       (with-unique-names (arguments-list)
         `(lambda (,@required-arguments ,@(when rest-argument `(&rest ,rest-argument)))
            (bind ((,arguments-list (list* ,@required-arguments ,rest-argument)))
-             ,(make-generic-function-discriminating-form function arguments-list)))))))
+             ,(make-generic-function-discriminating-form function arguments-list required-arguments)))))))
