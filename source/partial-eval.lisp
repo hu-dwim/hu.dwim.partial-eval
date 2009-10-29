@@ -368,8 +368,10 @@
   (:method ((ast multiple-value-prog1-form))
     ;; KLUDGE: this does not work properly when there are side effects or non local exits in the first form
     ;; TODO: does not return multiple-value
-    (%partial-eval (make-instance 'progn-form :body (list (partial-eval-implicit-progn-body (other-forms-of ast))
-                                                          (%partial-eval (first-form-of ast))))))
+    (bind ((result (%partial-eval (first-form-of ast))))
+      ;; FIXME: this is utterly broken, bah
+      (%partial-eval (make-instance 'progn-form :body (list result
+                                                            (partial-eval-implicit-progn-body (other-forms-of ast)))))))
 
   (:method ((ast block-form))
     (bind ((evaluated-body (partial-eval-implicit-progn-body ast))

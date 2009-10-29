@@ -92,8 +92,6 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
   (bind ((argument (first arguments)))
     ;; KLUDGE: extend variable type
-    (make-instance 'constant-form :value nil)
-    #+nil
     (if (and (typep argument 'variable-reference-form)
              (not (eq (variable-type (name-of argument)) +unbound-value+)))
         (%partial-eval (make-instance 'free-application-form

@@ -76,7 +76,7 @@
 
 (def layered-method eval-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
   (or (call-next-method)
-      (member operator '(typep list list* ; TODO: eliminate these
+      (member operator '(typep subtypep list list* ; TODO: eliminate these
                          sb-int:proper-list-of-length-p))))
 
 (def layered-method inline-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
