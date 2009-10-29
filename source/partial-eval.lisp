@@ -157,7 +157,7 @@
     nil)
 
   (:method ((ast walked-lexical-application-form))
-    (collect-potential-non-local-exits (code-of ast))))
+    (collect-potential-non-local-exits (definition-of ast))))
 
 (def (layered-function e) may-do-non-local-exit? (ast)
   (:method ((ast walked-form))
@@ -557,7 +557,7 @@
 
   (:method ((ast lexical-application-form))
     (bind ((*environment* (clone-environment))
-           (lambda-ast (code-of ast))
+           (lambda-ast (definition-of ast))
            (argument-values (mapcar #'%partial-eval (arguments-of ast))))
       (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A"
                           (operator-of ast) (arguments-of lambda-ast) argument-values)
