@@ -63,6 +63,10 @@
 (def layer standard-class-with-slots-layer (standard-class-without-slots-layer)
   ())
 
+(def layered-method inline-function-call? :in standard-class-with-slots-layer ((ast free-application-form) operator arguments)
+  (or (call-next-method)
+      (member operator '((setf slot-value-using-class)) :test #'equal)))
+
 (def test test/standard-class-with-slots/partial-eval ()
   (with-active-layers (standard-class-with-slots-layer)
     (is (equal (partial-eval '(make-instance 'standard-class-with-slots))
