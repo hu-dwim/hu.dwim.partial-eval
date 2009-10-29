@@ -13,27 +13,37 @@
 
 (def class* environment ()
   ((assumptions nil :documentation "A list of forms that evaluate to #t in the current environment")
-   (bindings nil :documentation "A list of name value pairs, where name is a symbol and value is walked-form")))
+   (bindings nil :documentation "A list of alternating name value pairs, where name is a symbol and value is a walked-form")
+   (types nil :documentation "A list of alternating name type pairs, where name is a symbol and type is a type designator")))
 
-(def (function e) make-environment (&key assumptions bindings)
+(def (function e) make-environment (&key assumptions bindings types)
   (make-instance 'environment
                  :assumptions assumptions
-                 :bindings bindings))
+                 :bindings bindings
+                 :types types))
 
 (def function clone-environment ()
   (partial-eval.debug "Cloning environment")
   (make-instance 'environment
-                 :assumptions (assumptions-of *environment*)
-                 :bindings (bindings-of *environment*)))
+                 :assumptions (copy-seq (assumptions-of *environment*))
+                 :bindings (copy-seq (bindings-of *environment*))
+                 :types (copy-seq (types-of *environment*))))
+
+(def constant +unbound-value+ '+unbound-value+)
+
+;;;;;;
+;;; Assumptions
+
+(def function extend-assumptions (assumption)
+  (partial-eval.debug "Extending assumptions with ~A" assumption)
+  (push assumption (assumptions-of *environment*)))
 
 ;;;;;;
 ;;; Variable bindings
 
-(def constant +unbound-variable+ '+unbound-variable+)
-
 (def function variable-binding (name)
   (assert (symbolp name))
-  (aprog1 (getf (bindings-of *environment*) name +unbound-variable+)
+  (aprog1 (getf (bindings-of *environment*) name +unbound-value+)
     (partial-eval.debug "Retrieving variable binding ~A results in ~A" name it)))
 
 (def function (setf variable-binding) (new-value name)
@@ -46,11 +56,17 @@
     (setf (variable-binding (car binding)) (cdr binding))))
 
 ;;;;;;
-;;; Assumptions
+;;; Variable types
 
-(def function extend-assumptions (assumption)
-  (partial-eval.debug "Extending assumptions with ~A" assumption)
-  (push assumption (assumptions-of *environment*)))
+(def function variable-type (name)
+  (assert (symbolp name))
+  (aprog1 (getf (types-of *environment*) name +unbound-value+)
+    (partial-eval.debug "Retrieving variable type ~A results in ~A" name it)))
+
+(def function (setf variable-type) (new-value name)
+  (partial-eval.debug "Changing variable type ~A to ~A" name new-value)
+  (assert (symbolp name))
+  (setf (getf (types-of *environment*) name) new-value))
 
 ;;;;;;
 ;;; Customization points
@@ -78,7 +94,7 @@
   (:method (name)
     #f))
 
-(def (layered-function e) may-do-side-effect? (ast)
+(def (layered-function e) may-have-side-effect? (ast)
   (:method ((ast walked-form))
     #t)
 
@@ -86,13 +102,13 @@
     #f)
 
   (:method ((ast if-form))
-    (or (may-do-side-effect? (condition-of ast))
-        (may-do-side-effect? (then-of ast))
-        (may-do-side-effect? (else-of ast))))
+    (or (may-have-side-effect? (condition-of ast))
+        (may-have-side-effect? (then-of ast))
+        (may-have-side-effect? (else-of ast))))
 
   (:method ((ast implicit-progn-mixin))
     (dolist (body-ast (body-of ast))
-      (when (may-do-side-effect? body-ast)
+      (when (may-have-side-effect? body-ast)
         (return #t))))
 
   (:method ((ast block-form))
@@ -118,10 +134,6 @@
 
   (:method ((ast free-application-form))
     (not (eval-function-call? ast (operator-of ast) (arguments-of ast)))))
-
-(def (layered-function e) does-side-effect? (ast)
-  (:method ((ast constant-form))
-    nil))
 
 (def (layered-function e) collect-potential-non-local-exits (ast)
   (:method ((ast constant-form))
@@ -305,7 +317,7 @@
                                        (%partial-eval body-ast)))
                 (when evaluated-ast
                   (when (or (null (cdr body-ast-cell))
-                            (may-do-side-effect? evaluated-ast)
+                            (may-have-side-effect? evaluated-ast)
                             (may-do-non-local-exit? evaluated-ast))
                     (collect evaluated-ast :into result))
                   (when (does-non-local-exit? evaluated-ast)
@@ -459,7 +471,7 @@
           (map nil 'funcall
                (iter (for (key value) :in-hashtable seen-forms)
                      (when (and (not (typep key '(or constant-form variable-reference-form)))
-                                (not (may-do-side-effect? key))
+                                (not (may-have-side-effect? key))
                                 (not (may-do-non-local-exit? key))
                                 (> value 1))
                        (bind ((name (gensym)))
@@ -484,17 +496,17 @@
 
   (:method ((ast lexical-variable-reference-form))
     (bind ((value (variable-binding (name-of ast))))
-      (if (eq +unbound-variable+ value)
+      (if (eq +unbound-value+ value)
           ast
-          (if (may-do-side-effect? value)
+          (if (may-have-side-effect? value)
               ast
               value))))
 
   (:method ((ast free-variable-reference-form))
     (bind ((value (variable-binding (name-of ast))))
-      (if (eq +unbound-variable+ value)
+      (if (eq +unbound-value+ value)
           ast
-          (if (may-do-side-effect? value)
+          (if (may-have-side-effect? value)
               ast
               value))))
 
@@ -536,14 +548,17 @@
                    (if source
                        (bind ((*environment* (clone-environment))
                               (lambda-ast (walk-form source)))
-                         (partial-eval.debug "Inlining function call to ~A ~A" operator source)
+                         (bind ((*print-level* 3))
+                           (partial-eval.debug "Inlining function call to ~A as ~A" operator source))
                          (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
                          (partial-eval-implicit-progn-body lambda-ast))
                        (make-instance 'free-application-form
                                       :operator operator
                                       :arguments arguments))
                  (give-up nil ast))))
-            (t (partial-eval-function-call ast operator arguments)))))
+            (t
+             (partial-eval.debug "Partial evaluating function call to ~A with arguments ~A" operator arguments)
+             (partial-eval-function-call ast operator arguments)))))
 
   (:method ((ast multiple-value-call-form))
     (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))
@@ -582,7 +597,6 @@ and the same non local exits, as the original FORM would have produced. The ENVI
 the initial assumptions in which the form should be evaluated. The LAYER parameter provides a way to customize
 the standard partial evaluation logic to your needs."
   (bind ((*environment* environment))
-    ;; KLUDGE: shall we really ignore?
     (with-active-layers (ignore-undefined-references)
       (funcall-with-layer-context
        (if layer

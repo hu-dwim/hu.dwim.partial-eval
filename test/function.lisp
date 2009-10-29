@@ -32,5 +32,5 @@
 ;;;;;;
 ;;; apply
 
-(def test test/function/funcall ()
+(def test test/function/apply ()
   (is (equal (partial-eval '(apply (lambda (&rest args) 1) nil)) 1)))

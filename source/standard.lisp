@@ -41,14 +41,14 @@
       (lexical-function-object-form
        (%partial-eval (make-instance 'lexical-application-form
                                      :operator (name-of function)
-                                     :code (make-instance 'lambda-function-form
-                                                          :body (body-of (definition-of function))
-                                                          :arguments (arguments-of (definition-of function)))
+                                     :definition (make-instance 'lambda-function-form
+                                                                :body (body-of (definition-of function))
+                                                                :arguments (arguments-of (definition-of function)))
                                      :arguments (rest arguments))))
       (function-object-form
        (%partial-eval (make-instance 'lexical-application-form
                                      :operator (name-of function)
-                                     :code function
+                                     :definition function
                                      :arguments (rest arguments))))
       (t (call-next-layered-method)))))
 
@@ -56,6 +56,10 @@
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
+           (%partial-eval (first (arguments-of argument))))
+          ((and (typep argument 'free-application-form)
+                (eq 'list* (operator-of argument))
+                (> (length (arguments-of argument)) 1))
            (%partial-eval (first (arguments-of argument))))
           (t (call-next-layered-method)))))
 
@@ -66,9 +70,34 @@
            (%partial-eval (make-instance 'free-application-form
                                          :operator 'list
                                          :arguments (cdr (arguments-of argument)))))
+          ((and (typep argument 'free-application-form)
+                (eq 'list* (operator-of argument))
+                (> (length (arguments-of argument)) 1))
+           (%partial-eval (make-instance 'free-application-form
+                                         :operator 'list*
+                                         :arguments (cdr (arguments-of argument)))))
           (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list)) arguments)
   (if arguments
       (call-next-layered-method)
       (make-instance 'constant-form :value nil)))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list*)) arguments)
+  (if (and (length= 1 arguments)
+           (typep (first arguments) 'constant-form))
+      (first arguments)
+      (call-next-layered-method)))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
+  (bind ((argument (first arguments)))
+    ;; KLUDGE: extend variable type
+    (make-instance 'constant-form :value nil)
+    #+nil
+    (if (and (typep argument 'variable-reference-form)
+             (not (eq (variable-type (name-of argument)) +unbound-value+)))
+        (%partial-eval (make-instance 'free-application-form
+                                      :operator 'subtypep
+                                      :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
+                                                       (second arguments))))
+        (call-next-layered-method))))
