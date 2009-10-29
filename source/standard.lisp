@@ -89,13 +89,27 @@
       (first arguments)
       (call-next-layered-method)))
 
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'consp)) arguments)
+  (bind ((argument (first arguments)))
+    (cond ((and (typep argument 'free-application-form)
+                (eq 'list* (operator-of argument))
+                (> (length (arguments-of argument)) 1))
+           (make-instance 'constant-form :value #t))
+          (t (call-next-layered-method)))))
+
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
   (bind ((argument (first arguments)))
-    ;; KLUDGE: extend variable type
     (if (and (typep argument 'variable-reference-form)
              (not (eq (variable-type (name-of argument)) +unbound-value+)))
         (%partial-eval (make-instance 'free-application-form
                                       :operator 'subtypep
                                       :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
                                                        (second arguments))))
+        (call-next-layered-method))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'class-of)) arguments)
+  (bind ((argument (first arguments)))
+    (if (and (typep argument 'variable-reference-form)
+             (not (eq (variable-type (name-of argument)) +unbound-value+)))
+        (make-instance 'constant-form :value (find-class (variable-type (name-of argument))))
         (call-next-layered-method))))

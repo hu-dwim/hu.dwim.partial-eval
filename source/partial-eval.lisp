@@ -29,7 +29,7 @@
                  :bindings (copy-seq (bindings-of *environment*))
                  :types (copy-seq (types-of *environment*))))
 
-(def constant +unbound-value+ '+unbound-value+)
+(def (constant e) +unbound-value+ '+unbound-value+)
 
 ;;;;;;
 ;;; Assumptions
@@ -41,12 +41,12 @@
 ;;;;;;
 ;;; Variable bindings
 
-(def function variable-binding (name)
+(def (function e) variable-binding (name)
   (assert (symbolp name))
   (aprog1 (getf (bindings-of *environment*) name +unbound-value+)
     (partial-eval.debug "Retrieving variable binding ~A results in ~A" name it)))
 
-(def function (setf variable-binding) (new-value name)
+(def (function e) (setf variable-binding) (new-value name)
   (partial-eval.debug "Changing variable binding ~A to ~A" name new-value)
   (assert (symbolp name))
   (setf (getf (bindings-of *environment*) name) new-value))
@@ -58,12 +58,12 @@
 ;;;;;;
 ;;; Variable types
 
-(def function variable-type (name)
+(def (function e) variable-type (name)
   (assert (symbolp name))
   (aprog1 (getf (types-of *environment*) name +unbound-value+)
     (partial-eval.debug "Retrieving variable type ~A results in ~A" name it)))
 
-(def function (setf variable-type) (new-value name)
+(def (function e) (setf variable-type) (new-value name)
   (partial-eval.debug "Changing variable type ~A to ~A" name new-value)
   (assert (symbolp name))
   (setf (getf (types-of *environment*) name) new-value))

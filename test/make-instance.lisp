@@ -31,10 +31,17 @@
   (or (call-next-method)
       (member operator
               '(make-instance allocate-instance initialize-instance shared-initialize
-                sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code))))
+                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code))))
 
 (def layered-method lookup-variable-value? :in standard-class-without-slots-layer ((name (eql 'sb-pcl::**boot-state**)))
   #t)
+
+(def layered-method partial-eval-function-call :in standard-class-without-slots-layer ((ast free-application-form) (operator (eql 'sb-kernel::classoid-of)) arguments)
+  (bind ((argument (first arguments)))
+    (if (and (typep argument 'variable-reference-form)
+             (not (eq (hu.dwim.partial-eval::variable-type (name-of argument)) +unbound-value+)))
+        (make-instance 'constant-form :value (sb-kernel:find-classoid (hu.dwim.partial-eval::variable-type (name-of argument))))
+        (call-next-layered-method))))
 
 (def test test/standard-class-without-slots/partial-eval ()
   (with-active-layers (standard-class-without-slots-layer)
