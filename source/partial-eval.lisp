@@ -237,6 +237,7 @@
 
 (def function variable-referenced? (name ast)
   (map-ast (lambda (ast)
+             ;; FIXME this is most probably broken with special-variables, and their handling might even need some walker updates
              (when (and (typep ast 'variable-reference-form)
                         (eq name (name-of ast)))
                (return-from variable-referenced? #t))
@@ -287,6 +288,7 @@
                                argument-names evaluated-values)))))
 
 (def function partial-eval-bindings (bindings)
+  ;; FIXME delme? seems to be dead code
   (mapcar (lambda (binding)
             (bind ((name (car binding))
                    (value (%partial-eval (cdr binding))))
@@ -415,10 +417,11 @@
                          :value value)
           (setf (variable-binding (name-of variable)) value))))
 
-  (:method ((ast variable-binding-form))
+  (:method ((ast lexical-variable-binder-form))
     (bind ((let*-form? (typep ast 'let*-form))
            (*environment* (clone-environment))
            (bindings (mapcar (lambda (binding)
+                               ;; FIXME binding is not a cons anymore, but a lexical-variable-binding-form
                                (bind ((name (car binding))
                                       (value (%partial-eval (cdr binding))))
                                  (when let*-form?
