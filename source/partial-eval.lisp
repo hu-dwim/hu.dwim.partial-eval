@@ -249,7 +249,7 @@
 
 (def function variable-referenced? (name ast)
   (map-ast (lambda (ast)
-             ;; FIXME this is most probably broken with special-variables, and their handling might even need some walker updates
+             ;; FIXME: this is most probably broken with special-variables, and their handling might even need some walker updates
              (when (and (typep ast 'variable-reference-form)
                         (eq name (name-of ast)))
                (return-from variable-referenced? #t))
@@ -283,7 +283,7 @@
                                           ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
                                                                                :arguments argument-definitions
                                                                                :body nil)))
-                                        ,(list 'quote (mapcar '%partial-eval argument-values))
+                                        ,(list 'quote (mapcar 'partial-eval-form argument-values))
                                       (list ,@argument-names)))))
       (extend-bindings (mapcar (lambda (name value)
                                  (cons name
@@ -300,10 +300,10 @@
                                argument-names evaluated-values)))))
 
 (def function partial-eval-bindings (bindings)
-  ;; FIXME delme? seems to be dead code
+  ;; FIXME: delme? seems to be dead code
   (mapcar (lambda (binding)
             (bind ((name (car binding))
-                   (value (%partial-eval (cdr binding))))
+                   (value (partial-eval-form (cdr binding))))
               (cons name value)))
           bindings))
 
@@ -314,7 +314,7 @@
                 (for body-ast = (car body-ast-cell))
                 (for evaluated-ast = (progn
                                        (partial-eval.debug "Progn form element ~A" body-ast)
-                                       (%partial-eval body-ast)))
+                                       (partial-eval-form body-ast)))
                 (when evaluated-ast
                   (when (or (null (cdr body-ast-cell))
                             (may-have-side-effect? evaluated-ast)
@@ -327,14 +327,14 @@
                 (finally (return (make-progn-form result))))
     (partial-eval.debug "Result of implicit progn body is ~A" it)))
 
-(def (layered-function e) %partial-eval (form)
+(def (layered-function e) partial-eval-form (form)
   (:documentation "This function is the recursive variant of PARTIAL-EVAL.")
 
   (:method ((ast constant-form))
     ast)
 
   (:method ((ast if-form))
-    (bind ((evaluated-condition (%partial-eval (condition-of ast))))
+    (bind ((evaluated-condition (partial-eval-form (condition-of ast))))
       (flet ((partial-eval-then ()
                (bind ((*environment* (clone-environment))
                       (form (if (typep evaluated-condition 'constant-form)
@@ -344,14 +344,14 @@
                           (member (first form) '(eq eql =)))
                      (extend-assumptions form)
                      (extend-assumptions `(not (eq #f ,form))))
-                 (%partial-eval (then-of ast))))
+                 (partial-eval-form (then-of ast))))
              (partial-eval-else ()
                (bind ((*environment* (clone-environment))
                       (form (if (typep evaluated-condition 'constant-form)
                                 (unwalk-form (condition-of ast))
                                 (unwalk-form evaluated-condition))))
                  (extend-assumptions `(eq #f ,form))
-                 (%partial-eval (else-of ast)))))
+                 (partial-eval-form (else-of ast)))))
         (partial-eval.debug "If condition evaluated to ~A" evaluated-condition)
         (if (typep evaluated-condition 'constant-form)
             (if (value-of evaluated-condition)
@@ -368,9 +368,9 @@
   (:method ((ast multiple-value-prog1-form))
     ;; KLUDGE: this does not work properly when there are side effects or non local exits in the first form
     ;; TODO: does not return multiple-value
-    (bind ((result (%partial-eval (first-form-of ast))))
+    (bind ((result (partial-eval-form (first-form-of ast))))
       ;; FIXME: this is utterly broken, bah
-      (%partial-eval (make-instance 'progn-form :body (list result
+      (partial-eval-form (make-instance 'progn-form :body (list result
                                                             (partial-eval-implicit-progn-body (other-forms-of ast)))))))
 
   (:method ((ast block-form))
@@ -382,7 +382,7 @@
                   (eq non-local-exit (first all-non-local-exits))
                   (typep non-local-exit 'return-from-form)
                   (eq ast (target-block-of non-local-exit)))
-             (%partial-eval (result-of non-local-exit)))
+             (partial-eval-form (result-of non-local-exit)))
             ((block-referenced? ast evaluated-body)
              (make-instance 'block-form
                             :name (name-of ast)
@@ -392,7 +392,7 @@
   (:method ((ast return-from-form))
     (make-instance 'return-from-form
                    :target-block (target-block-of ast)
-                   :result (%partial-eval (result-of ast))))
+                   :result (partial-eval-form (result-of ast))))
 
   (:method ((ast tagbody-form))
     (iter (with body = ast)
@@ -431,7 +431,7 @@
     ast)
 
   (:method ((ast setq-form))
-    (bind ((value (%partial-eval (value-of ast)))
+    (bind ((value (partial-eval-form (value-of ast)))
            (variable (variable-of ast)))
       (if (typep variable 'free-variable-reference-form)
           (make-instance 'setq-form
@@ -443,9 +443,9 @@
     (bind ((let*-form? (typep ast 'let*-form))
            (*environment* (clone-environment))
            (bindings (mapcar (lambda (binding)
-                               ;; FIXME binding is not a cons anymore, but a lexical-variable-binding-form
+                               ;; FIXME: binding is not a cons anymore, but a lexical-variable-binding-form
                                (bind ((name (car binding))
-                                      (value (%partial-eval (cdr binding))))
+                                      (value (partial-eval-form (cdr binding))))
                                  (when let*-form?
                                    (setf (variable-binding name) value))
                                  (cons name value)))
@@ -531,7 +531,7 @@
 
   (:method ((ast free-application-form))
     (bind ((operator (operator-of ast))
-           (arguments (mapcar #'%partial-eval (arguments-of ast))))
+           (arguments (mapcar #'partial-eval-form (arguments-of ast))))
       (cond ((and (eval-function-call? ast operator arguments)
                   (every (of-type '(or constant-form free-function-object-form)) arguments))
              ;; TODO: should check assumptions in *environment*, because we may already have the return value there
@@ -565,10 +565,10 @@
              (partial-eval-function-call ast operator arguments)))))
 
   (:method ((ast multiple-value-call-form))
-    (bind ((arguments (mapcar #'%partial-eval (arguments-of ast)))
+    (bind ((arguments (mapcar #'partial-eval-form (arguments-of ast)))
            (*environment* (clone-environment)))
       (partial-eval-lambda-list (arguments-of (function-designator-of ast)) arguments)
-      (%partial-eval (function-designator-of ast))))
+      (partial-eval-form (function-designator-of ast))))
 
   (:method ((ast macrolet-form))
     (partial-eval-implicit-progn-body ast))
@@ -585,14 +585,14 @@
   (:method ((ast lexical-application-form))
     (bind ((*environment* (clone-environment))
            (lambda-ast (definition-of ast))
-           (argument-values (mapcar #'%partial-eval (arguments-of ast))))
+           (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
       (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A"
                           (operator-of ast) (arguments-of lambda-ast) argument-values)
       (partial-eval-lambda-list (arguments-of lambda-ast) argument-values)
       (partial-eval-implicit-progn-body lambda-ast)))
 
   (:method ((ast the-form))
-    (%partial-eval (value-of ast))))
+    (partial-eval-form (value-of ast))))
 
 (def (function e) partial-eval (form &key (environment (make-environment)) (layer 'standard-partial-eval-layer))
   "The function PARTIAL-EVAL takes a lisp FORM and returns another lisp FORM. The resulting form should,
@@ -607,4 +607,4 @@ the standard partial evaluation logic to your needs."
            (adjoin-layer layer (current-layer-context))
            (current-layer-context))
        (lambda ()
-         (unwalk-form (%partial-eval (walk-form form))))))))
+         (unwalk-form (partial-eval-form (walk-form form))))))))

@@ -23,59 +23,59 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'apply)) arguments)
   (if (and (typep (first arguments) 'free-function-object-form)
            (typep (last-elt arguments) 'constant-form))
-      (%partial-eval (make-instance 'free-application-form
-                                    :operator (name-of (first arguments))
-                                    :arguments (append (rest (butlast arguments))
-                                                       (mapcar (lambda (value)
-                                                                 (make-instance 'constant-form :value value))
-                                                               (value-of (last-elt arguments))))))
+      (partial-eval-form (make-instance 'free-application-form
+                                        :operator (name-of (first arguments))
+                                        :arguments (append (rest (butlast arguments))
+                                                           (mapcar (lambda (value)
+                                                                     (make-instance 'constant-form :value value))
+                                                                   (value-of (last-elt arguments))))))
       (call-next-layered-method)))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'funcall)) arguments)
   (bind ((function (first arguments)))
     (typecase function
       (constant-form
-       (%partial-eval (make-instance 'free-application-form
-                                     :operator (value-of function)
-                                     :arguments (rest arguments))))
+       (partial-eval-form (make-instance 'free-application-form
+                                         :operator (value-of function)
+                                         :arguments (rest arguments))))
       (lexical-function-object-form
-       (%partial-eval (make-instance 'lexical-application-form
-                                     :operator (name-of function)
-                                     :definition (make-instance 'lambda-function-form
-                                                                :body (body-of (definition-of function))
-                                                                :arguments (arguments-of (definition-of function)))
-                                     :arguments (rest arguments))))
+       (partial-eval-form (make-instance 'lexical-application-form
+                                         :operator (name-of function)
+                                         :definition (make-instance 'lambda-function-form
+                                                                    :body (body-of (definition-of function))
+                                                                    :arguments (arguments-of (definition-of function)))
+                                         :arguments (rest arguments))))
       (function-object-form
-       (%partial-eval (make-instance 'lexical-application-form
-                                     :operator (name-of function)
-                                     :definition function
-                                     :arguments (rest arguments))))
+       (partial-eval-form (make-instance 'lexical-application-form
+                                         :operator (name-of function)
+                                         :definition function
+                                         :arguments (rest arguments))))
       (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'car)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
-           (%partial-eval (first (arguments-of argument))))
+           (partial-eval-form (first (arguments-of argument))))
           ((and (typep argument 'free-application-form)
                 (eq 'list* (operator-of argument))
                 (> (length (arguments-of argument)) 1))
-           (%partial-eval (first (arguments-of argument))))
+           (partial-eval-form (first (arguments-of argument))))
           (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cdr)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
-           (%partial-eval (make-instance 'free-application-form
-                                         :operator 'list
-                                         :arguments (cdr (arguments-of argument)))))
+           (partial-eval-form (make-instance 'free-application-form
+                                             :operator 'list
+                                             :arguments (cdr (arguments-of argument)))))
           ((and (typep argument 'free-application-form)
                 (eq 'list* (operator-of argument))
                 (> (length (arguments-of argument)) 1))
-           (%partial-eval (make-instance 'free-application-form
-                                         :operator 'list*
-                                         :arguments (cdr (arguments-of argument)))))
+           (partial-eval-form (make-instance 'free-application-form
+                                             :operator 'list*
+                                             :arguments (cdr (arguments-of argument)))))
           (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list)) arguments)
@@ -101,10 +101,10 @@
   (bind ((argument (first arguments)))
     (if (and (typep argument 'variable-reference-form)
              (not (eq (variable-type (name-of argument)) +unbound-value+)))
-        (%partial-eval (make-instance 'free-application-form
-                                      :operator 'subtypep
-                                      :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
-                                                       (second arguments))))
+        (partial-eval-form (make-instance 'free-application-form
+                                          :operator 'subtypep
+                                          :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
+                                                           (second arguments))))
         (call-next-layered-method))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'class-of)) arguments)

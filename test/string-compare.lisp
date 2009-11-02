@@ -46,11 +46,11 @@
   (or (call-next-method)
       (member operator '(string-compare-with-loop))))
 
-(def layered-method %partial-eval :in string-compare-with-loop-layer ((ast free-application-form))
+(def layered-method partial-eval-form :in string-compare-with-loop-layer ((ast free-application-form))
   (aif (and (eq 'length (operator-of ast))
             (find (unwalk-form (make-instance 'free-application-form
                                               :operator 'length
-                                              :arguments (mapcar #'%partial-eval (arguments-of ast))))
+                                              :arguments (mapcar #'partial-eval-form (arguments-of ast))))
                   (hu.dwim.partial-eval::assumptions-of hu.dwim.partial-eval::*environment*) :test (lambda (a b) (member a b :test 'equal))))
        (make-instance 'constant-form :value (second it))
        (call-next-method)))
