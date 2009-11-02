@@ -100,7 +100,7 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
   (bind ((argument (first arguments)))
     (if (and (typep argument 'variable-reference-form)
-             (not (eq (variable-type (name-of argument)) +unbound-value+)))
+             (variable-type (name-of argument)))
         (partial-eval-form (make-instance 'free-application-form
                                           :operator 'subtypep
                                           :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
@@ -110,6 +110,6 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'class-of)) arguments)
   (bind ((argument (first arguments)))
     (if (and (typep argument 'variable-reference-form)
-             (not (eq (variable-type (name-of argument)) +unbound-value+)))
+             (variable-type (name-of argument)))
         (make-instance 'constant-form :value (find-class (variable-type (name-of argument))))
         (call-next-layered-method))))
