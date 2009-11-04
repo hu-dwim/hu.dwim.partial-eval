@@ -51,7 +51,7 @@
 
 (def function extend-bindings (bindings)
   (dolist (binding bindings)
-    (setf (variable-binding (car binding)) (cdr binding))))
+    (setf (variable-binding (name-of binding)) (initial-value-of binding))))
 
 ;;;;;;
 ;;; Variable types
@@ -277,21 +277,22 @@
                                         ,(list 'quote (mapcar 'partial-eval-form argument-values))
                                       (list ,@argument-names)))))
       (extend-bindings (mapcar (lambda (name value)
-                                 (cons name
-                                       (if (typep value 'walked-form)
-                                           value
-                                           (make-instance 'constant-form
-                                                          :value (if (listp value)
-                                                                     (mapcar (lambda (v)
-                                                                               (if (typep v 'constant-form)
-                                                                                   (value-of v)
-                                                                                   v))
-                                                                             value)
-                                                                     value)))))
+                                 (make-instance 'lexical-variable-binding-form
+                                                :name name
+                                                :initial-value (if (typep value 'walked-form)
+                                                                   value
+                                                                   (make-instance 'constant-form
+                                                                                  :value (if (listp value)
+                                                                                             (mapcar (lambda (v)
+                                                                                                       (if (typep v 'constant-form)
+                                                                                                           (value-of v)
+                                                                                                           v))
+                                                                                                     value)
+                                                                                             value)))))
                                argument-names evaluated-values)))))
 
 (def function partial-eval-implicit-progn-body (ast)
-  (aprog1 (iter (for body-ast-cell :on (if (consp ast)
+  (aprog1 (iter (for body-ast-cell :on (if (listp ast)
                                            ast
                                            (body-of ast)))
                 (for body-ast = (car body-ast-cell))
@@ -433,20 +434,21 @@
     (bind ((let*-form? (typep ast 'let*-form))
            (*environment* (clone-partial-eval-environment))
            (bindings (mapcar (lambda (binding)
-                               ;; FIXME: binding is not a cons anymore, but a lexical-variable-binding-form
-                               (bind ((name (car binding))
-                                      (value (partial-eval-form (cdr binding))))
+                               (bind ((name (name-of binding))
+                                      (value (partial-eval-form (initial-value-of binding))))
                                  (when let*-form?
                                    (setf (variable-binding name) value))
-                                 (cons name value)))
+                                 (make-instance 'lexical-variable-binding-form
+                                                :name name
+                                                :initial-value value)))
                              (bindings-of ast))))
       (unless let*-form?
         (extend-bindings bindings))
       (bind ((evaluated-body (partial-eval-implicit-progn-body ast))
              (runtime-bindings (remove-if (lambda (binding)
-                                            (bind ((name (car binding)))
-                                              (or (and (typep (cdr binding) 'variable-reference-form)
-                                                       (eq name (name-of (cdr binding))))
+                                            (bind ((name (name-of binding)))
+                                              (or (and (typep (initial-value-of binding) 'variable-reference-form)
+                                                       (eq name (name-of (initial-value-of binding))))
                                                   (not (variable-referenced? name evaluated-body)))))
                                           bindings)))
         ;; make common subexpressions local variables
@@ -469,11 +471,13 @@
                                 (not (may-do-non-local-exit? key))
                                 (> value 1))
                        (bind ((name (gensym)))
-                         (push (cons name (bind ((class (class-of key)))
-                                            (prog1-bind clone (make-instance class)
-                                              (dolist (slot (class-slots class))
-                                                (when (slot-boundp-using-class class key slot)
-                                                  (setf (slot-value-using-class class clone slot) (slot-value-using-class class key slot)))))))
+                         (push (make-instance 'lexical-variable-binding-form
+                                              :name name
+                                              :initial-value (bind ((class (class-of key)))
+                                                               (prog1-bind clone (make-instance class)
+                                                                 (dolist (slot (class-slots class))
+                                                                   (when (slot-boundp-using-class class key slot)
+                                                                     (setf (slot-value-using-class class clone slot) (slot-value-using-class class key slot)))))))
                                runtime-bindings)
                          (map-ast (lambda (ast)
                                     (when (eq key ast)
@@ -565,7 +569,12 @@
 
   (:method ((ast flet-form))
     ;; TODO: really?
-    (extend-bindings (bindings-of ast))
+    ;; KLUDGE: why not lexical-variable-binder-forms? instead of cons cells?
+    (extend-bindings (mapcar (lambda (binding)
+                               (make-instance 'lexical-variable-binding-form
+                                              :name (car binding)
+                                              :initial-value (cdr binding)))
+                             (bindings-of ast)))
     (partial-eval.debug "Evaluating flet function ~A" ast)
     (partial-eval-implicit-progn-body ast))
 
@@ -584,7 +593,7 @@
   (:method ((ast the-form))
     (partial-eval-form (value-of ast))))
 
-(def (function e) partial-eval (form &key (environment (make-partial-eval-environment)) (layer 'standard-partial-eval-layer))
+(def (function e) partial-eval (form &key (environment (make-partial-eval-environment)) layer)
   "The function PARTIAL-EVAL takes a lisp FORM and returns another lisp FORM. The resulting form should,
 in all possible environments, produce the same return value, the same side effects in the same order,
 and the same non local exits (in and out), as the original FORM would have produced. The ENVIRONMENT parameter
