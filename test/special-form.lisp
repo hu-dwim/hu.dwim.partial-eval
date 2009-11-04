@@ -46,6 +46,8 @@
 ;;; multiple-value-prog1
 
 (def test test/special-form/multiple-value-prog1 ()
+  (is (signals error (partial-eval '(multiple-value-prog1))))
+  (is (equal 1 (partial-eval '(multiple-value-prog1 1))))
   (is (equal 1 (partial-eval '(multiple-value-prog1 1 2 3)))))
 
 ;;;;;;
@@ -54,15 +56,19 @@
 (def test test/special-form/block ()
   (is (equal nil (partial-eval '(block nil))))
   (is (equal 1 (partial-eval '(block nil 1))))
-  (is (equal 2 (partial-eval '(block nil 1 2)))))
+  (is (equal 2 (partial-eval '(block nil 1 2))))
+  (is (equal '(print 1) (partial-eval '(block nil (print 1)))))
+  (is (equal '(progn (print 1) 2) (partial-eval '(block nil (print 1) 2)))))
 
 ;;;;;;
 ;;; return-from
 
 (def test test/special-form/return-from ()
+  (is (equal 1 (partial-eval '(block nil (return-from nil 1)))))
   (is (equal 2 (partial-eval '(block nil 1 (return-from nil 2)))))
   (is (equal 2 (partial-eval '(block nil 1 (return-from nil 2) (print 3)))))
   (is (equal 2 (partial-eval '(block nil 1 (return-from nil 2) (error 3)))))
+  (is (equal '(progn (print 2) 3) (partial-eval '(block nil 1 (print 2) (return-from nil 3)))))
   (is (equal 3 (partial-eval '(block outer 1
                                (block inner 2 (return-from outer 3) (error 4))
                                (error 5))))))
@@ -72,8 +78,8 @@
 
 (def test test/special-form/tagbody ()
   (is (equal nil (partial-eval '(tagbody))))
-  (is (equal nil (partial-eval '(tagbody 1))))
-  (is (equal nil (partial-eval '(tagbody 1 2)))))
+  (is (equal nil (partial-eval '(tagbody :begin))))
+  (is (equal '(progn (print 1) nil) (partial-eval '(tagbody (print 1))))))
 
 ;;;;;;
 ;;; go
@@ -104,7 +110,7 @@
   (is (equal nil (partial-eval '(let ((repeat 3))
                                  (tagbody
                                   :begin
-                                    (if (<= repeat 0)
+                                    (if (= repeat 0)
                                         (go :end)
                                         (setq repeat (- repeat 1)))
                                     (go :begin)
@@ -137,8 +143,7 @@
 ;;; flet
 
 (def test test/special-form/flet ()
-  (is (equal 1 (partial-eval '(flet ((foo ()
-                                      1))
+  (is (equal 1 (partial-eval '(flet ((foo () 1))
                                (funcall #'foo))))))
 
 ;;;;;;
