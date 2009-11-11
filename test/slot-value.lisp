@@ -16,7 +16,8 @@
 
 (def layered-method eval-function-call? :in slot-value-using-class-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator '(typep subtypep slot-definition-location slot-definition-name list* sb-pcl::check-obsolete-instance))))
+      (member operator '(typep subtypep slot-definition-location slot-definition-name list*
+                         sb-pcl::check-obsolete-instance sb-pcl::safe-p))))
 
 (def layered-method inline-function-call? :in slot-value-using-class-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
@@ -31,14 +32,19 @@
         (make-instance 'constant-form :value #t)
         (call-next-layered-method))))
 
-(def layered-method lookup-variable-value? :in slot-value-using-class-layer ((ast free-variable-reference-form) (name (eql 'sb-pcl::+slot-unbound+)))
-  #t)
+(def layered-method has-function-call-side-effect? :in slot-value-using-class-layer ((ast free-application-form) operator arguments)
+  (if (member operator '(sb-kernel:%instance-ref sb-kernel:coerce-to-condition))
+      :never
+      (call-next-layered-method)))
 
 (def test test/slot-value-using-class/partial-eval ()
   (with-active-layers (slot-value-using-class-layer)
     (bind ((class (find-class 'standard-class/with-slots))
            (slot (first (class-slots class))))
       (is (equal (partial-eval `(slot-value-using-class ,class instance ,slot) :types '(instance standard-class/with-slots))
-                 nil))
+                 '(let* ((sb-pcl::value (aref (sb-kernel:%instance-ref instance 1) 0)))
+                   (if (eq sb-pcl::value sb-pcl::+slot-unbound+)
+                       (error (sb-kernel:coerce-to-condition 'unbound-slot (list :name 'foo :instance instance) 'simple-error 'error))
+                       sb-pcl::value))))
       (is (equal (partial-eval `(setf (slot-value-using-class ,class instance ,slot) "foo") :types '(instance standard-class/with-slots))
-                 nil)))))
+                 '(sb-kernel:%svset (sb-kernel:%instance-ref instance 1) 0 "foo"))))))

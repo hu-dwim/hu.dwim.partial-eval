@@ -42,10 +42,19 @@
         (make-instance 'constant-form :value (sb-kernel:find-classoid (hu.dwim.partial-eval::variable-type (name-of argument))))
         (call-next-layered-method))))
 
+(def layered-method has-function-call-side-effect? :in make-instance/without-slots-layer ((ast free-application-form) operator arguments)
+  (if (member operator '(make-array))
+      :never
+      (call-next-layered-method)))
+
 (def test test/make-instance/without-slots/partial-eval ()
   (with-active-layers (make-instance/without-slots-layer)
-    (is (equal (partial-eval '(make-instance 'standard-class/without-slots) :types '(sb-kernel::instance 'integer))
-               nil))))
+    (is (equal (partial-eval '(make-instance 'standard-class/without-slots) :types '(sb-kernel::instance integer))
+               `(let* ((sb-kernel:instance
+                        (sb-pcl::%make-standard-instance nil (random most-positive-fixnum sb-pcl::*instance-hash-code-random-state*))))
+                  (sb-kernel:%set-instance-layout sb-kernel:instance ,(sb-pcl::class-wrapper (find-class 'standard-class/without-slots)))
+                  (sb-kernel:%instance-set sb-kernel:instance 1 (make-array 0 :initial-element sb-pcl::+slot-unbound+))
+                  sb-kernel:instance)))))
 
 ;;;;;;
 ;;; standard-class/with-slots

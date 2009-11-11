@@ -66,11 +66,11 @@
                  (block nil
                    (if (char= #\h (aref text 0))
                        nil
-                       (return-from nil nil))
+                       (return nil))
                    (if (char= #\e (aref text 1))
                        nil
-                       (return-from nil nil))
-                   (return-from nil t)))))))
+                       (return nil))
+                   (return t)))))))
 
 ;;;;;;
 ;;; string-compare/recursion

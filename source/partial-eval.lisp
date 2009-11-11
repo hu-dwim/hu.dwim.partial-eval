@@ -170,9 +170,7 @@
   :never)
 
 (def layered-method exits-non-locally? ((ast free-application-form))
-  (if (eval-function-call? ast (operator-of ast) (arguments-of ast))
-      :never
-      :sometimes))
+  :never)
 
 ;;;;;;
 ;;; collect-non-local-exits
@@ -264,7 +262,13 @@
 (def layered-method has-side-effect? ((ast free-application-form))
   (if (eval-function-call? ast (operator-of ast) (arguments-of ast))
       :never
-      :sometimes))
+      (has-function-call-side-effect? ast (operator-of ast) (arguments-of ast))))
+
+;;;;;;
+;;; has-function-call-side-effect?
+
+(def layered-method has-function-call-side-effect? ((ast free-application-form) operator arguments)
+  :sometimes)
 
 ;;;;;;
 ;;; partial-eval-lambda-list
@@ -407,7 +411,9 @@
           ((block-referenced? ast evaluated-body)
            (make-instance 'block-form
                           :name (name-of ast)
-                          :body (list evaluated-body)))
+                          :body (if (typep evaluated-body 'progn-form)
+                                    (body-of evaluated-body)
+                                    (list evaluated-body))))
           (t evaluated-body))))
 
 (def layered-method partial-eval-form ((ast return-from-form))
@@ -537,7 +543,7 @@
   (bind ((name (name-of ast)))
     (if (lookup-variable-value? ast name)
         (make-instance 'constant-form :value (symbol-value name))
-        ast)))
+        (call-next-layered-method))))
 
 (def layered-method partial-eval-form ((ast walked-lexical-function-object-form))
   ast)
