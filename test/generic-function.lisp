@@ -7,9 +7,14 @@
 (in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
-;;; generic-function
+;;; test/generic-function
 
 (def suite* (test/generic-function :in test))
+
+;;;;;;
+;;; print-applied-method-information
+
+(def suite* (test/generic-function/print-applied-method-information :in test/generic-function))
 
 (def generic print-applied-method-information (instance))
 
@@ -69,26 +74,55 @@
   (print "integer: after"))
 
 ;;;;;;
-;;; partial-eval
+;;; partial-eval/print-applied-method-information
 
-(def layer generic-function-layer (standard-partial-eval-layer)
-  ())
+(def function partial-eval/print-applied-method-information (form &key types)
+  (partial-eval form
+                :types types
+                :layer 'standard-partial-eval-layer
+                :eval-function-calls '(typep subtypep
+                                       ;; KLUDGE: TODO: eliminate these
+                                       list list*)
+                :inline-function-calls '(print-applied-method-information sb-int:proper-list-of-length-p)))
 
-(def layered-method eval-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
-  (or (call-next-method)
-      (member operator '(typep subtypep list list* ; TODO: eliminate these
-                         sb-int:proper-list-of-length-p))))
+(def test test/generic-function/print-applied-method-information/t ()
+  (bind ((form '(progn
+                 (print "t: enter around")
+                 (print "t: before")
+                 (print "t: primary")
+                 (print "t: after")
+                 (print "t: leave around"))))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information t)) form))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information foo) :types '(foo symbol)) form))))
 
-(def layered-method inline-function-call? :in generic-function-layer ((ast free-application-form) operator arguments)
-  (or (call-next-method)
-      (member operator
-              '(print-applied-method-information))))
+(def test test/generic-function/print-applied-method-information/integer ()
+  (bind ((form '(progn
+                 (print "integer: enter around")
+                 (print "t: enter around")
+                 (print "integer: before")
+                 (print "t: before")
+                 (print "integer: primary enter")
+                 (print "t: primary")
+                 (print "integer: primary leave")
+                 (print "t: after")
+                 (print "integer: after")
+                 (print "t: leave around")
+                 (print "integer: leave around"))))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information 42)) form))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information foo) :types '(foo integer)) form))))
 
-(def test test/generic-function/print-applied-method-information ()
-  (with-active-layers (generic-function-layer)
-    (is (equal (partial-eval '(print-applied-method-information t))
-               nil))
-    (is (equal (partial-eval '(print-applied-method-information 42))
-               nil))
-    (is (equal (partial-eval '(print-applied-method-information "42"))
-               nil))))
+(def test test/generic-function/print-applied-method-information/string ()
+  (bind ((form '(progn
+                 (print "string: enter around")
+                 (print "t: enter around")
+                 (print "string: before")
+                 (print "t: before")
+                 (print "string: primary enter")
+                 (print "t: primary")
+                 (print "string: primary leave")
+                 (print "t: after")
+                 (print "string: after")
+                 (print "t: leave around")
+                 (print "string: leave around"))))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information "42")) form))
+    (is (equal (partial-eval/print-applied-method-information '(print-applied-method-information foo) :types '(foo string)) form))))

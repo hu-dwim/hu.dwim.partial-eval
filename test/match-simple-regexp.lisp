@@ -7,13 +7,12 @@
 (in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
-;;; match-simple-regexp-with-recursion
+;;; test/match-simple-regexp
 
-(def suite* (test/match-simple-regexp-with-recursion :in test))
+(def suite* (test/match-simple-regexp :in test))
 
-(def function match-simple-regexp-with-recursion (expression text)
-  "A very simple matcher that takes EXPRESSION as a sequence of alphanumeric characters, (), *, + and ? with the usual regular expression semantics.
-Returns the position in TEXT specifying the next character that was not matched by EXPRESSION, or NIL if there's no match at all."
+(def function match-simple-regexp (expression text)
+  "A very simple matcher that takes EXPRESSION as a sequence of alphanumeric characters, (), *, + and ? with the usual regular expression semantics. Returns the position in TEXT specifying the next character that was not matched by EXPRESSION, or NIL if there's no match at all."
   (let ((text-length (length text)))
     (labels ((recurse (expression text position)
                (if (stringp expression)
@@ -53,33 +52,26 @@ Returns the position in TEXT specifying the next character that was not matched 
                             finally (return sum)))))))
       (recurse expression text 0))))
 
-;;;;;;
-;;; correctness
-
-(def test test/match-simple-regexp-with-recursion/correctness ()
+(def test test/match-simple-regexp/correctness ()
   (bind ((expression '("a" (* "ab") "b")))
-    (is (not (match-simple-regexp-with-recursion expression "")))
-    (is (not (match-simple-regexp-with-recursion expression "a")))
-    (is (not (match-simple-regexp-with-recursion expression "aa")))
-    (is (not (match-simple-regexp-with-recursion expression "b")))
-    (is (not (match-simple-regexp-with-recursion expression "bb")))
-    (is (= 2 (match-simple-regexp-with-recursion expression "ab")))
-    (is (= 4 (match-simple-regexp-with-recursion expression "aabb")))
-    (is (= 6 (match-simple-regexp-with-recursion expression "aababb")))
-    (is (= 2 (match-simple-regexp-with-recursion expression "abab")))))
+    (is (not (match-simple-regexp expression "")))
+    (is (not (match-simple-regexp expression "a")))
+    (is (not (match-simple-regexp expression "aa")))
+    (is (not (match-simple-regexp expression "b")))
+    (is (not (match-simple-regexp expression "bb")))
+    (is (= 2 (match-simple-regexp expression "ab")))
+    (is (= 4 (match-simple-regexp expression "aabb")))
+    (is (= 6 (match-simple-regexp expression "aababb")))
+    (is (= 2 (match-simple-regexp expression "abab")))))
 
-;;;;;;
-;;; partial-eval
-
-(def layer match-simple-regexp-with-recursion-layer (standard-partial-eval-layer)
+(def layer match-simple-regexp-layer (standard-partial-eval-layer)
   ())
 
-(def layered-method inline-function-call? :in match-simple-regexp-with-recursion-layer ((ast free-application-form) operator arguments)
-  (or (call-next-method)
-      (member operator '(match-simple-regexp-with-recursion))))
+(def layered-method inline-function-call? :in match-simple-regexp-layer ((ast free-application-form) operator arguments)
+  (or (call-next-layered-method)
+      (member operator '(match-simple-regexp))))
 
-(def test test/match-simple-regexp-with-recursion/partial-eval ()
-  #+nil
-  (with-active-layers (match-simple-regexp-with-recursion-layer)
-    (is (equal (partial-eval '(match-simple-regexp-with-recursion "a(ab)*b" text))
+(def test test/match-simple-regexp/partial-eval ()
+  (with-active-layers (match-simple-regexp-layer)
+    (is (equal (partial-eval '(match-simple-regexp '("a" (* "ab") "b") text))
                nil))))

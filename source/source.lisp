@@ -62,11 +62,15 @@
 
 (def function make-generic-method-lambda-form (method)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-pcl:method-lambda-list method)))
-         (form (read-source-form method)))
+         (form (cddr (read-source-form method))))
     (with-unique-names (arguments methods)
       `(lambda (,arguments ,methods)
-         (bind ((,(append required-arguments other-arguments?) ,arguments))
-           ,@(nthcdr (1+ (position-if #'consp form)) form))))))
+         (destructuring-bind ,(append required-arguments other-arguments?) ,arguments
+           ;; KLUDGE: TODO: this is pretty much broken
+           ,@(bind ((form (remove-if (lambda (element)
+                                       (member element '(:before :around :after)))
+                                     form)))
+                   (nthcdr (1+ (position-if #'consp form)) form)))))))
 
 (def function make-generic-function-discriminating-form (function arguments-list)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-mop:generic-function-lambda-list function)))
@@ -153,11 +157,14 @@
   (:method ((name symbol))
     (make-function-lambda-form (fdefinition name)))
 
+  (:method ((name cons))
+    (make-function-lambda-form (fdefinition name)))
+
   (:method ((function function))
     (bind (((:values nil nil function-name) (function-lambda-expression function))
            (form (read-source-form function)))
       (cond ((and (eq 'defun (first form))
-                  (eq function-name (second form)))
+                  (equal function-name (second form)))
              ;; TODO: use walker
              (bind (((:values body declarations nil) (parse-body (cdddr form) :documentation #t)))
                `(lambda ,(caddr form)
@@ -165,7 +172,7 @@
                   ,@body)))
             ((and (eq 'def (first form))
                   (eq 'function (second form))
-                  (eq function-name (third form)))
+                  (equal function-name (third form)))
              (bind (((:values body declarations nil) (parse-body (cddddr form) :documentation #t)))
                `(lambda ,(cadddr form)
                   ,@declarations

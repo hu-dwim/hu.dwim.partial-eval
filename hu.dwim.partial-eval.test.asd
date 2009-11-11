@@ -18,13 +18,15 @@
                :hu.dwim.stefil+swank
                :hu.dwim.partial-eval)
   :components ((:module "test"
-                :components ((:file "generic-function" :depends-on ("suite"))
+                :components ((:file "class" :depends-on ("suite"))
                              (:file "function" :depends-on ("suite"))
+                             (:file "generic-function" :depends-on ("suite"))
                              (:file "integer-power" :depends-on ("suite"))
                              (:file "list-append" :depends-on ("suite"))
                              (:file "make-instance" :depends-on ("suite"))
                              (:file "match-simple-regexp" :depends-on ("suite"))
                              (:file "package")
+                             (:file "slot-value" :depends-on ("suite"))
                              (:file "special-form" :depends-on ("suite"))
                              (:file "string-compare" :depends-on ("suite"))
                              (:file "suite" :depends-on ("package"))))))

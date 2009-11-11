@@ -7,30 +7,32 @@
 (in-package :hu.dwim.partial-eval.test)
 
 ;;;;;;
-;;; function
+;;; test/function
 
 (def suite* (test/function :in test))
 
-;;;;;;
-;;; list
+(def parial-eval-test test/function/list ()
+  (list) -> nil
+  (list a) -> (list a)
+  (car (list a b)) -> a
+  (car (list (cons a b))) -> (cons a b)
+  (cdr (list a b)) -> (list b)
+  (cdr (list a)) -> nil
+  (null (list a)) -> #f)
 
-(def test test/function/list ()
-  (is (equal (partial-eval '(list)) nil))
-  (is (equal (partial-eval '(list 1)) '(list 1)))
-  (is (equal (partial-eval '(car (list 1 2))) 1))
-  (is (equal (partial-eval '(car (list (cons 1 2)))) '(cons 1 2)))
-  (is (equal (partial-eval '(cdr (list 1 2))) '(list 2)))
-  (is (equal (partial-eval '(cdr (list 1))) nil)))
+(def parial-eval-test test/function/list* ()
+  (list* nil) -> nil
+  (list* a nil) -> (list* a nil)
+  (car (list* a nil)) -> a
+  (car (list* (cons a b) nil)) -> (cons a b)
+  (cdr (list* a b nil)) -> (list* b nil)
+  (cdr (list* a nil)) -> nil
+  (null (list* a nil)) -> #f)
 
-;;;;;;
-;;; funcall
+(def parial-eval-test test/function/funcall ()
+  (funcall '+ a b) -> (+ a b)
+  (funcall (lambda (x y) (+ x y)) a b) -> (+ a b))
 
-(def test test/function/funcall ()
-  (is (equal (partial-eval '(funcall '+ 1 2)) 3))
-  (is (equal (partial-eval '(funcall (lambda (&rest args) 1) nil)) 1)))
-
-;;;;;;
-;;; apply
-
-(def test test/function/apply ()
-  (is (equal (partial-eval '(apply (lambda (&rest args) 1) nil)) 1)))
+(def parial-eval-test test/function/apply ()
+  (apply '+ a b nil) -> (+ a b)
+  (apply (lambda (x y) (+ x y)) a b nil) -> (+ a b))
