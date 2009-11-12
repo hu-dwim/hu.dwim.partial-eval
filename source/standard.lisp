@@ -18,6 +18,14 @@
                          integerp zerop plusp minusp < <= = >= > - + * / 1+ 1-))))
 
 ;;;;;;
+;;; has-function-call-side-effect?
+
+(def layered-method has-function-call-side-effect? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
+  (if (member operator '(cons list list*))
+      :never
+      (call-next-layered-method)))
+
+;;;;;;
 ;;; function-call-return-value
 
 (def layered-method function-call-return-value :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'not)) arguments)

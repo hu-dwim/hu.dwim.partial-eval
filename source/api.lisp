@@ -37,19 +37,19 @@
   (:documentation "Takes the original AST, the function NAME symbol and all function ARGUMENTS already partially evaluated. Returns an AST that gives the return value when the original AST would return locally, otherwise NIL."))
 
 (def (layered-function e) returns-new-allocation? (ast)
-  (:documentation "Takes an AST and returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the allocation of the returned value in all possible environments."))
+  (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN, or :ALWAYS depending on the allocation of the returned value in all possible environments."))
 
 (def (layered-function e) returns-locally? (ast)
-  (:documentation "Takes an AST and returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the local returns in all possible environments."))
+  (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the local returns in all possible environments."))
 
 (def (layered-function e) exits-non-locally? (ast)
-  (:documentation "Takes an AST and returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the non local exits in all possible environments."))
+  (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the non local exits in all possible environments."))
 
 (def (layered-function e) has-side-effect? (ast)
-  (:documentation "Takes an AST and returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the side effects in all possible environments."))
+  (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the side effects in all possible environments."))
 
 (def (layered-function e) has-function-call-side-effect? (ast operator arguments)
-  (:documentation "Takes the original AST, the function NAME symbol, and all function ARGUMENTS already partially evaluated. Returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the side effects in all possible environments."))
+  (:documentation "Takes the original AST, the function NAME symbol, and all function ARGUMENTS already partially evaluated. Returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the side effects in all possible environments."))
 
 (def (layered-function e) collect-non-local-exits (ast)
   (:documentation "Takes an AST and returns all possible non local exits in a list."))

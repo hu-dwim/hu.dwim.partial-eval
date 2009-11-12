@@ -84,11 +84,13 @@
       (make-instance 'constant-form :value #t)
       (call-next-layered-method)))
 
+;; TODO: this is redundant with slot-value-using-class-layer
 (def layered-method inline-function-call? :in make-instance/with-slots-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
       (member operator '((setf slot-value-using-class) slot-boundp-using-class
                          (setf sb-pcl::clos-slots-ref) sb-int:proper-list-of-length-p) :test #'equal)))
 
+;; TODO: this is redundant with slot-value-using-class-layer
 (def layered-method has-function-call-side-effect? :in make-instance/with-slots-layer ((ast free-application-form) operator arguments)
   (if (member operator '(aref sb-kernel:%instance-ref))
       :never

@@ -24,13 +24,13 @@
 ;;; may-type
 
 (def type may-type ()
-  '(member :never :sometimes :always))
+  '(member :never :unknown :always))
 
 (def function never? (value)
   (eq value :never))
 
-(def function sometimes? (value)
-  (eq value :sometimes))
+(def function unknown? (value)
+  (eq value :unknown))
 
 (def function always? (value)
   (eq value :always))
@@ -38,7 +38,7 @@
 (def function may-not (value)
   (ecase value
     (:never :always)
-    (:sometimes :sometimes)
+    (:unknown :unknown)
     (:always :never)))
 
 (def function may-or (&rest values)
@@ -47,8 +47,8 @@
 (def function may-or* (values &key (key #'identity))
   (cond ((find :always values :key key)
          :always)
-        ((find :sometimes values :key key)
-         :sometimes)
+        ((find :unknown values :key key)
+         :unknown)
         (t :never)))
 
 (def function may-and (&rest values)
@@ -66,7 +66,7 @@
            :always)
           ((= length (count :never values :key key))
            :never)
-          (t :sometimes))))
+          (t :unknown))))
 
 ;;;;;;
 ;;; eval-function-call?
@@ -146,7 +146,7 @@
 ;;; returns-new-allocation?
 
 (def layered-method returns-new-allocation? ((ast walked-form))
-  :sometimes)
+  :unknown)
 
 (def layered-method returns-new-allocation? ((ast constant-form))
   :never)
@@ -155,7 +155,7 @@
 ;;; returns-locally?
 
 (def layered-method returns-locally? ((ast walked-form))
-  :sometimes)
+  :unknown)
 
 (def layered-method returns-locally? ((ast constant-form))
   :always)
@@ -173,7 +173,7 @@
 ;;; exits-non-locally?
 
 (def layered-method exits-non-locally? ((ast walked-form))
-  :sometimes)
+  :unknown)
 
 (def layered-method exits-non-locally? ((ast constant-form))
   :never)
@@ -269,7 +269,7 @@
 ;;; has-side-effect?
 
 (def layered-method has-side-effect? ((ast walked-form))
-  :sometimes)
+  :unknown)
 
 (def layered-method has-side-effect? ((ast constant-form))
   :never)
@@ -323,7 +323,7 @@
 ;;; has-function-call-side-effect?
 
 (def layered-method has-function-call-side-effect? ((ast free-application-form) operator arguments)
-  :sometimes)
+  :unknown)
 
 ;;;;;;
 ;;; collect-side-effects
@@ -363,12 +363,12 @@
                                                 :name name
                                                 :initial-value (etypecase value
                                                                  (walked-form value)
-                                                                 (null (make-instance 'constant-form :value nil))
-                                                                 (list (if (constant-values? value)
+                                                                 (cons (if (constant-values? value)
                                                                            (constant-values value)
                                                                            (make-instance 'free-application-form
                                                                                           :operator 'list
-                                                                                          :arguments value))))))
+                                                                                          :arguments value)))
+                                                                 (t (make-instance 'constant-form :value value)))))
                                argument-names evaluated-values)))))
 
 ;;;;;;
@@ -740,7 +740,7 @@
                                           (adjoin-layer layer (current-layer-context))
                                           (current-layer-context))
                                     ;; KLUDGE: unfortunately contextl does not support slot values in layers
-                                    ;; TODO this is not thread safe
+                                    ;; TODO: this is not thread safe, maybe this should be part of the environment?
                                     (bind ((prototype (contextl::layer-context-prototype it)))
                                       (setf (eval-function-calls-of prototype) eval-function-calls
                                             (inline-function-calls-of prototype) inline-function-calls
