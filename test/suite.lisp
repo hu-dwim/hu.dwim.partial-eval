@@ -8,8 +8,9 @@
 
 (def suite* (test :in root-suite))
 
-(def definer parial-eval-test (name arguments &body form-result-pairs)
+(def definer partial-eval-test (name arguments &body form-result-pairs)
   `(def test ,name ,arguments
      ,@(iter (for form-result-pair :on form-result-pairs :by 'cdddr)
+             (assert (eq '-> (second form-result-pair)))
              (collect `(is (equal (partial-eval ',(first form-result-pair))
                                   ',(third form-result-pair)))))))

@@ -14,7 +14,19 @@
 
 (def layered-method eval-function-call? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= zerop plusp minusp < <= = >= > - + * / 1+ 1-))))
+      (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= stringp symbolp
+                         integerp zerop plusp minusp < <= = >= > - + * / 1+ 1-))))
+
+;;;;;;
+;;; function-call-return-value
+
+(def layered-method function-call-return-value :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'not)) arguments)
+  (bind ((result (return-value (first (arguments-of ast)))))
+    (if (typep result 'constant-form)
+        (make-instance 'constant-form :value (not (value-of result)))
+        (make-instance 'free-application-form
+                       :operator 'not
+                       :arguments (list result)))))
 
 ;;;;;;
 ;;; partial-eval-function-call
@@ -25,12 +37,19 @@
       (call-next-layered-method)))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'apply)) arguments)
-  (bind ((function (first arguments)))
-    (if (typep (last-elt arguments) 'constant-form)
+  (bind ((function (first arguments))
+         (last-argument (last-elt arguments)))
+    (if (or (typep last-argument 'constant-form)
+            (and (typep last-argument 'free-application-form)
+                 (eq 'list (operator-of last-argument))))
         (bind ((arguments (append (butlast (rest arguments))
-                                  (mapcar (lambda (value)
-                                            (make-instance 'constant-form :value value))
-                                          (value-of (last-elt arguments))))))
+                                  (etypecase last-argument
+                                    (constant-form
+                                     (mapcar (lambda (value)
+                                               (make-instance 'constant-form :value value))
+                                             (value-of last-argument)))
+                                    (free-application-form
+                                     (arguments-of last-argument))))))
           (typecase function
             (constant-form
              (partial-eval (make-instance 'free-application-form
@@ -103,10 +122,13 @@
       (make-instance 'constant-form :value nil)))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list*)) arguments)
-  (if (and (length= 1 arguments)
-           (typep (first arguments) 'constant-form))
-      (first arguments)
-      (call-next-layered-method)))
+  (bind ((first-argument (first arguments)))
+    (cond ((and (length= 1 arguments)
+                (or (typep first-argument 'constant-form)
+                    (and (typep first-argument 'free-application-form)
+                         (eq 'list (operator-of first-argument)))))
+           first-argument)
+          (t (call-next-layered-method)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'null)) arguments)
   (bind ((argument (first arguments)))
@@ -128,15 +150,31 @@
               (make-instance 'constant-form :value #t))
              (t (call-next-layered-method)))))
 
+(def function have-common-subclass? (class-1 class-2)
+  (labels ((subclasses (class)
+             (bind ((direct-subclasses (class-direct-subclasses class)))
+               (append direct-subclasses
+                       (mappend #'subclasses direct-subclasses)))))
+    (intersection (subclasses class-1)
+                  (subclasses class-2))))
+
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
-  (bind ((argument (first arguments)))
-    ;; KLUDGE: TODO: this is plain wrong
-    (if (and (typep argument 'variable-reference-form)
-             (variable-type (name-of argument)))
-        (partial-eval-form (make-instance 'free-application-form
-                                          :operator 'subtypep
-                                          :arguments (list (make-instance 'constant-form :value (variable-type (name-of argument)))
-                                                           (second arguments))))
+  (bind ((value-argument (first arguments))
+         (value-type (return-type value-argument))
+         (type-argument (second arguments)))
+    (if (typep type-argument 'constant-form)
+        (cond ((subtypep value-type (value-of type-argument))
+               (make-instance 'constant-form :value #t))
+              ((subtypep `(and ,value-type
+                               ,(value-of type-argument)) nil)
+               (make-instance 'constant-form :value #f))
+              ((and (find-class value-type nil)
+                    (find-class (value-of type-argument) nil))
+               (if (have-common-subclass? (find-class value-type nil)
+                                          (find-class (value-of type-argument) nil))
+                   (call-next-layered-method)
+                   (make-instance 'constant-form :value #f)))
+              (t (call-next-layered-method)))
         (call-next-layered-method))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'class-of)) arguments)

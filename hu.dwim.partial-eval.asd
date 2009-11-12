@@ -26,7 +26,7 @@
                              (:file "environment" :depends-on ("logger"))
                              (:file "logger" :depends-on ("configuration"))
                              (:file "package")
-                             (:file "partial-eval" :depends-on ("api" "util" "source" "logger"))
+                             (:file "partial-eval" :depends-on ("api" "util" "source" "environment"))
                              (:file "source" :depends-on ("configuration"))
                              (:file "standard" :depends-on ("partial-eval"))
                              (:file "util" :depends-on ("package"))))))

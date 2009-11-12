@@ -9,17 +9,36 @@
 ;;;;;;
 ;;; Util
 
+(def function make-progn-form-body (body)
+  (etypecase body
+    (progn-form (body-of body))
+    (walked-form (list body))
+    (list
+     (labels ((recurse (forms last-form?)
+                (iter (with length = (length forms))
+                      (for index :from 1)
+                      (for form :in forms)
+                      (if (typep form 'progn-form)
+                          (appending (recurse (body-of form) (and last-form?
+                                                                  (= length index))))
+                          (if (or (and last-form?
+                                       (= length index))
+                                  (not (never? (has-side-effect? form)))
+                                  (not (never? (exits-non-locally? form))))
+                              (collect form))))))
+       (recurse body #t)))))
+
 (def function make-progn-form (body)
-  (cond ((null body)
-         (make-instance 'constant-form :value nil))
-        ((length= body 1)
-         (first body))
-        (t
-         (make-instance 'progn-form
-                        :body (iter (for form :in body)
-                                    (if (typep form 'progn-form)
-                                        (appending (body-of form))
-                                        (collect form)))))))
+  (etypecase body
+    (progn-form body)
+    (walked-form body)
+    (list
+     (bind ((result (make-progn-form-body body)))
+       (cond ((null result)
+              (make-instance 'constant-form :value nil))
+             ((length= result 1)
+              (first result))
+             (t (make-instance 'progn-form :body result)))))))
 
 (def function make-free-application-form (operator arguments)
   (if (consp operator)
@@ -56,7 +75,7 @@
   (mapcar (lambda (form)
             (etypecase form
               (constant-form (value-of form))
-              (free-function-object-form (name-of form))))
+              (free-function-object-form (fdefinition (name-of form)))))
           forms))
 
 (def function current-layer-prototype ()

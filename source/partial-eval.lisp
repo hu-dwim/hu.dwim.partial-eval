@@ -57,6 +57,17 @@
 (def function may-and* (values &key (key #'identity))
   (may-not (may-or* values :key key)))
 
+(def function may-merge (&rest values)
+  (may-merge* values))
+
+(def function may-merge* (values &key (key #'identity))
+  (bind ((length (length values)))
+    (cond ((= length (count :always values :key key))
+           :always)
+          ((= length (count :never values :key key))
+           :never)
+          (t :sometimes))))
+
 ;;;;;;
 ;;; eval-function-call?
 
@@ -99,6 +110,38 @@
 (def layered-method return-type ((ast variable-reference-form))
   (variable-type (name-of ast)))
 
+(def layered-method return-type ((ast free-application-form))
+  (function-call-return-type ast (operator-of ast) (arguments-of ast)))
+
+;;;;;;
+;;; function-call-return-type
+
+(def layered-method function-call-return-type ((ast free-application-form) operator arguments)
+  t)
+
+;;;;;;
+;;; return-value
+
+(def layered-method return-value ((ast walked-form))
+  nil)
+
+(def layered-method return-value ((ast constant-form))
+  ast)
+
+(def layered-method return-value ((ast implicit-progn-mixin))
+  (if (never? (exits-non-locally? ast))
+      (return-value (last-elt (body-of ast)))
+      (call-next-layered-method)))
+
+(def layered-method return-value ((ast free-application-form))
+  (function-call-return-value ast (operator-of ast) (arguments-of ast)))
+
+;;;;;;
+;;; function-call-return-value
+
+(def layered-method function-call-return-value ((ast free-application-form) operator arguments)
+  nil)
+
 ;;;;;;
 ;;; returns-new-allocation?
 
@@ -123,8 +166,7 @@
 (def layered-method returns-locally? ((ast go-form))
   :never)
 
-;; TODO: wrong direct subclass ordering (walked-form implicit-progn-mixin)
-(def layered-method returns-locally? :around ((ast implicit-progn-mixin))
+(def layered-method returns-locally? ((ast implicit-progn-mixin))
   (may-not (may-or* (body-of ast) :key 'exits-non-locally?)))
 
 ;;;;;;
@@ -138,12 +180,22 @@
 
 (def layered-method exits-non-locally? ((ast if-form))
   (may-or (exits-non-locally? (condition-of ast))
-          (may-and (exits-non-locally? (then-of ast))
-                   (exits-non-locally? (else-of ast)))))
+          (may-merge (exits-non-locally? (then-of ast))
+                     (exits-non-locally? (else-of ast)))))
 
-;; TODO: wrong direct subclass ordering (walked-form implicit-progn-mixin)
-(def layered-method exits-non-locally? :around ((ast implicit-progn-mixin))
+(def layered-method exits-non-locally? ((ast implicit-progn-mixin))
   (may-or* (body-of ast) :key 'exits-non-locally?))
+
+(def layered-method exits-non-locally? ((ast binder-form-mixin))
+  (may-or (may-or* (bindings-of ast) :key 'exits-non-locally?)
+          (call-next-layered-method)))
+
+(def layered-method exits-non-locally? ((ast block-form))
+  (if (every (lambda (non-local-exit)
+               (typep non-local-exit 'return-from-form))
+             (collect-non-local-exits ast))
+      :never
+      (call-next-layered-method)))
 
 (def layered-method exits-non-locally? ((ast return-from-form))
   :always)
@@ -186,8 +238,7 @@
           (collect-non-local-exits (then-of ast))
           (collect-non-local-exits (else-of ast))))
 
-;; TODO: wrong direct subclass ordering (walked-form implicit-progn-mixin)
-(def layered-method collect-non-local-exits :around ((ast implicit-progn-mixin))
+(def layered-method collect-non-local-exits ((ast implicit-progn-mixin))
   (mappend #'collect-non-local-exits (body-of ast)))
 
 (def layered-method collect-non-local-exits ((ast return-from-form))
@@ -225,12 +276,15 @@
 
 (def layered-method has-side-effect? ((ast if-form))
   (may-or (has-side-effect? (condition-of ast))
-          (may-and (has-side-effect? (then-of ast))
-                   (has-side-effect? (else-of ast)))))
+          (may-merge (has-side-effect? (then-of ast))
+                     (has-side-effect? (else-of ast)))))
 
-;; TODO: wrong direct subclass ordering (walked-form implicit-progn-mixin)
-(def layered-method has-side-effect? :around ((ast implicit-progn-mixin))
+(def layered-method has-side-effect? ((ast implicit-progn-mixin))
   (may-or* (body-of ast) :key 'has-side-effect?))
+
+(def layered-method has-side-effect? ((ast binder-form-mixin))
+  (may-or (may-or* (bindings-of ast) :key 'has-side-effect?)
+          (call-next-layered-method)))
 
 (def layered-method has-side-effect? ((ast return-from-form))
   :never)
@@ -260,7 +314,8 @@
   (has-side-effect? (definition-of ast)))
 
 (def layered-method has-side-effect? ((ast free-application-form))
-  (if (eval-function-call? ast (operator-of ast) (arguments-of ast))
+  (if (and (never? (may-or* (arguments-of ast) :key 'has-side-effect?))
+           (eval-function-call? ast (operator-of ast) (arguments-of ast)))
       :never
       (has-function-call-side-effect? ast (operator-of ast) (arguments-of ast))))
 
@@ -271,6 +326,20 @@
   :sometimes)
 
 ;;;;;;
+;;; collect-side-effects
+
+(def layered-method collect-side-effects ((ast constant-form))
+  nil)
+
+(def layered-method collect-side-effects ((ast implicit-progn-mixin))
+  (mappend 'collect-side-effects (body-of ast)))
+
+(def layered-method collect-side-effects ((ast free-application-form))
+  (if (eval-function-call? ast (operator-of ast) (arguments-of ast))
+      (mappend 'collect-side-effects (arguments-of ast))
+      (list ast)))
+
+;;;;;;
 ;;; partial-eval-lambda-list
 
 (def function partial-eval-lambda-list (argument-definitions argument-values)
@@ -278,8 +347,8 @@
             argument-values)
     (bind ((argument-names (mappend (lambda (argument-definition)
                                       (typecase argument-definition
-                                        (optional-function-argument-form (list (name-of argument-definition)
-                                                                               (supplied-p-parameter-name-of argument-definition)))
+                                        (function-argument-form-with-supplied-p-parameter (list (name-of argument-definition)
+                                                                                                (supplied-p-parameter-name-of argument-definition)))
                                         (function-argument-form (list (name-of argument-definition)))))
                                     argument-definitions))
            ;; TODO: remove this eval and use alexandria
@@ -292,16 +361,14 @@
       (extend-bindings (mapcar (lambda (name value)
                                  (make-instance 'lexical-variable-binding-form
                                                 :name name
-                                                :initial-value (if (typep value 'walked-form)
-                                                                   value
-                                                                   (make-instance 'constant-form
-                                                                                  :value (if (listp value)
-                                                                                             (mapcar (lambda (v)
-                                                                                                       (if (typep v 'constant-form)
-                                                                                                           (value-of v)
-                                                                                                           v))
-                                                                                                     value)
-                                                                                             value)))))
+                                                :initial-value (etypecase value
+                                                                 (walked-form value)
+                                                                 (null (make-instance 'constant-form :value nil))
+                                                                 (list (if (constant-values? value)
+                                                                           (constant-values value)
+                                                                           (make-instance 'free-application-form
+                                                                                          :operator 'list
+                                                                                          :arguments value))))))
                                argument-names evaluated-values)))))
 
 ;;;;;;
@@ -311,31 +378,35 @@
   (partial-eval-implicit-progn (body-of ast)))
 
 (def layered-method partial-eval-implicit-progn ((ast list))
-  (aprog1 (iter (for body-ast-cell :on ast)
-                (for body-ast = (car body-ast-cell))
-                (for last-form? = (null (cdr body-ast-cell)))
-                (for evaluated-ast = (progn
-                                       (partial-eval.debug "Progn form element ~A" body-ast)
-                                       (partial-eval-form body-ast)))
-                (for exists-non-locally? = (exits-non-locally? evaluated-ast))
-                (when evaluated-ast
-                  (when (or last-form?
-                            (not (never? (has-side-effect? evaluated-ast)))
-                            (not (never? exists-non-locally?)))
-                    (etypecase evaluated-ast
-                      (progn-form
-                       (appending (body-of evaluated-ast) :into result))
-                      (multiple-value-prog1-form
-                       (if last-form?
-                           (collect evaluated-ast :into result)
-                           (progn
-                             (collect (first-form-of evaluated-ast) :into result)
-                             (appending (other-forms-of evaluated-ast) :into result))))
-                      (t (collect evaluated-ast :into result))))
-                  (when (always? exists-non-locally?)
-                    (return (make-progn-form result))))
-                (finally (return (make-progn-form result))))
-    (partial-eval.debug "Result of implicit progn body is ~A" it)))
+  (iter (for body-ast-cell :on ast)
+        (for body-ast = (car body-ast-cell))
+        (for last-form? = (null (cdr body-ast-cell)))
+        (for evaluated-ast = (progn
+                               (partial-eval.debug "Progn form element ~A" body-ast)
+                               (partial-eval-form body-ast)))
+        (for exists-non-locally? = (exits-non-locally? evaluated-ast))
+        (when evaluated-ast
+          (if (or last-form?
+                  (not (never? (has-side-effect? evaluated-ast)))
+                  (not (never? exists-non-locally?)))
+              (etypecase evaluated-ast
+                (progn-form
+                 (appending (body-of evaluated-ast) :into result))
+                (multiple-value-prog1-form
+                 (if last-form?
+                     (collect evaluated-ast :into result)
+                     (progn
+                       (collect (first-form-of evaluated-ast) :into result)
+                       (appending (other-forms-of evaluated-ast) :into result))))
+                (t (collect evaluated-ast :into result)))
+              (partial-eval.debug "Skipping implicit progn body form ~A" evaluated-ast))
+          (when (always? exists-non-locally?)
+            (partial-eval.debug "Skipping the rest of implicit progn body form due to ~A, returning ~A" evaluated-ast result)
+            (return (make-progn-form result))))
+        (finally
+         (progn
+           (partial-eval.debug "Finished implicit progn body, result is ~A" result)
+           (return (make-progn-form result))))))
 
 ;;;;;;
 ;;; partial-eval-function-call
@@ -351,7 +422,8 @@
   ast)
 
 (def layered-method partial-eval-form ((ast if-form))
-  (bind ((evaluated-condition (partial-eval-form (condition-of ast))))
+  (bind ((evaluated-condition (partial-eval-form (condition-of ast)))
+         (evaluated-condition-return-value (return-value evaluated-condition)))
     (flet ((partial-eval-then ()
              (bind ((form (if (typep evaluated-condition 'constant-form)
                               (unwalk-form (condition-of ast))
@@ -368,16 +440,27 @@
                (extend-assumptions `(eq #f ,form))
                (partial-eval-form (else-of ast)))))
       (partial-eval.debug "If condition evaluated to ~A" evaluated-condition)
-      (if (typep evaluated-condition 'constant-form)
-          (if (value-of evaluated-condition)
-              (partial-eval-then)
-              (partial-eval-else))
-          (make-instance 'if-form
-                         :condition evaluated-condition
-                         :then (bind ((*environment* (clone-environment)))
-                                 (partial-eval-then))
-                         :else (bind ((*environment* (clone-environment)))
-                                 (partial-eval-else)))))))
+      (if (typep evaluated-condition-return-value 'constant-form)
+          (bind ((evaluated-branch (if (value-of evaluated-condition-return-value)
+                                       (partial-eval-then)
+                                       (partial-eval-else))))
+            (if (not (never? (has-side-effect? evaluated-condition)))
+                (make-progn-form (list evaluated-condition evaluated-branch))
+                evaluated-branch))
+          (bind ((negeated-condition? (and (typep evaluated-condition 'free-application-form)
+                                           (eq 'not (operator-of evaluated-condition)))))
+            (make-instance 'if-form
+                           :condition (if negeated-condition?
+                                          (first (arguments-of evaluated-condition))
+                                          evaluated-condition)
+                           :then (bind ((*environment* (clone-environment)))
+                                   (if negeated-condition?
+                                       (partial-eval-else)
+                                       (partial-eval-then)))
+                           :else (bind ((*environment* (clone-environment)))
+                                   (if negeated-condition?
+                                       (partial-eval-then)
+                                       (partial-eval-else)))))))))
 
 (def layered-method partial-eval-form ((ast progn-form))
   (partial-eval-implicit-progn ast))
@@ -484,18 +567,22 @@
     (unless let*-form?
       (extend-bindings bindings))
     (bind ((evaluated-body (partial-eval-implicit-progn ast))
-           (runtime-bindings (remove-if (lambda (binding)
-                                          (bind ((name (name-of binding)))
-                                            (or (and (typep (initial-value-of binding) 'variable-reference-form)
-                                                     (eq name (name-of (initial-value-of binding))))
-                                                (not (variable-referenced? name evaluated-body)))))
-                                        bindings)))
+           (body (make-progn-form evaluated-body))
+           (runtime-bindings (iter (for binding :in bindings)
+                                   (for name = (name-of binding))
+                                   (for variable-referenced? = (variable-referenced? name evaluated-body))
+                                   (for initial-value = (initial-value-of binding))
+                                   (for has-side-effect? = (has-side-effect? initial-value))
+                                   (for exits-non-locally? = (exits-non-locally? initial-value))
+                                   (if (and (not (and (typep initial-value 'variable-reference-form)
+                                                      (eq name (name-of initial-value))))
+                                            variable-referenced?)
+                                       (collect binding)
+                                       (if (or (not (never? has-side-effect?))
+                                               (not (never? exits-non-locally?)))
+                                           (setf body (make-progn-form (list initial-value body))))))))
       ;; make common subexpressions local variables
-      (bind ((body (make-instance 'progn-form
-                                  :body (if (typep evaluated-body 'progn-form)
-                                            (body-of evaluated-body)
-                                            (list evaluated-body))))
-             (seen-forms (make-hash-table)))
+      (bind ((seen-forms (make-hash-table)))
         (map-ast (lambda (ast)
                    (when (typep ast 'walked-form)
                      (if (gethash ast seen-forms)
@@ -528,15 +615,17 @@
         (if runtime-bindings
             (make-instance 'let*-form #+nil (class-of ast) ;; TODO: based on whether if runtime-bindings were extended
                            :bindings runtime-bindings
-                           :body (body-of body))
-            evaluated-body)))))
+                           :body (make-progn-form-body body))
+            (make-progn-form body))))))
 
 (def layered-method partial-eval-form ((ast variable-reference-form))
   (bind ((value (variable-binding (name-of ast))))
-    (if (and value
-             (never? (has-side-effect? value))
-             (never? (exits-non-locally? value)))
-        value
+    (if value
+        (if (and (never? (has-side-effect? value))
+                 (never? (exits-non-locally? value)))
+            value
+            (or (return-value value)
+                ast))
         ast)))
 
 (def layered-method partial-eval-form ((ast special-variable-reference-form))
@@ -569,16 +658,17 @@
                 (< *function-call-inline-level* +default-function-call-inline-limit+))
            (bind ((source (make-function-lambda-form operator))
                   (*function-call-inline-level* (1+ *function-call-inline-level*)))
-             (restart-case
-                 (if source
-                     (bind ((*environment* (clone-environment))
-                            (lambda-ast (walk-form source)))
-                       (bind ((*print-level* 3))
-                         (partial-eval.debug "Inlining function call to ~A as ~A" operator source))
-                       (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
-                       (partial-eval-implicit-progn lambda-ast))
-                     (make-free-application-form operator arguments))
-               (give-up nil ast))))
+             (aprog1 (restart-case
+                         (if source
+                             (bind ((*environment* (clone-environment))
+                                    (lambda-ast (walk-form source)))
+                               (bind ((*print-level* 3))
+                                 (partial-eval.debug "Inlining function call to ~A as ~A" operator source))
+                               (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
+                               (partial-eval-implicit-progn lambda-ast))
+                             (make-free-application-form operator arguments))
+                       (give-up nil ast))
+               (partial-eval.debug "Result fo inlining function call to ~A is ~A" operator it))))
           (t
            (partial-eval.debug "Partial evaluating function call to ~A with arguments ~A" operator arguments)
            (partial-eval-function-call ast operator arguments)))))
@@ -608,10 +698,10 @@
   (bind ((*environment* (clone-environment))
          (lambda-ast (definition-of ast))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
-    (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A"
-                        (operator-of ast) (arguments-of lambda-ast) argument-values)
+    (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A" (operator-of ast) (arguments-of lambda-ast) argument-values)
     (partial-eval-lambda-list (arguments-of lambda-ast) argument-values)
-    (partial-eval-implicit-progn lambda-ast)))
+    (aprog1 (partial-eval-implicit-progn lambda-ast)
+      (partial-eval.debug "Result for lexical function application ~A is ~A" (operator-of ast) it))))
 
 (def layered-method partial-eval-form ((ast lambda-application-form))
   (bind ((*environment* (clone-environment))

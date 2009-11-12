@@ -11,7 +11,7 @@
 
 (def suite* (test/function :in test))
 
-(def parial-eval-test test/function/list ()
+(def partial-eval-test test/function/list ()
   (list) -> nil
   (list a) -> (list a)
   (car (list a b)) -> a
@@ -20,7 +20,7 @@
   (cdr (list a)) -> nil
   (null (list a)) -> #f)
 
-(def parial-eval-test test/function/list* ()
+(def partial-eval-test test/function/list* ()
   (list* nil) -> nil
   (list* a nil) -> (list* a nil)
   (car (list* a nil)) -> a
@@ -29,10 +29,11 @@
   (cdr (list* a nil)) -> nil
   (null (list* a nil)) -> #f)
 
-(def parial-eval-test test/function/funcall ()
+(def partial-eval-test test/function/funcall ()
   (funcall '+ a b) -> (+ a b)
-  (funcall (lambda (x y) (+ x y)) a b) -> (+ a b))
+  (funcall (lambda (x y) (+ x y)) a b) -> (+ a b)
+  (funcall (lambda (&key (a nil a?)) a?)) -> nil)
 
-(def parial-eval-test test/function/apply ()
+(def partial-eval-test test/function/apply ()
   (apply '+ a b nil) -> (+ a b)
   (apply (lambda (x y) (+ x y)) a b nil) -> (+ a b))

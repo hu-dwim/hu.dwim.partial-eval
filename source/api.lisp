@@ -27,6 +27,15 @@
 (def (layered-function e) return-type (ast)
   (:documentation "Takes an AST and returns a lisp type specifier. Any value that could be returned by the given form in all possible environments is an instance of the returned type."))
 
+(def (layered-function e) function-call-return-type (ast operator arguments)
+  (:documentation "Takes the original AST, the function NAME symbol and all function ARGUMENTS already partially evaluated. Returns a lisp type specifier, any value that could be returned by the given function call in all possible environments is an instance of the returned type."))
+
+(def (layered-function e) return-value (ast)
+  (:documentation "Takes an AST and returns an AST that gives the return value when the original AST would return locally, otherwise NIL."))
+
+(def (layered-function e) function-call-return-value (ast operator arguments)
+  (:documentation "Takes the original AST, the function NAME symbol and all function ARGUMENTS already partially evaluated. Returns an AST that gives the return value when the original AST would return locally, otherwise NIL."))
+
 (def (layered-function e) returns-new-allocation? (ast)
   (:documentation "Takes an AST and returns one of :NEVER, :SOMETIMES, or :ALWAYS depending on the allocation of the returned value in all possible environments."))
 
