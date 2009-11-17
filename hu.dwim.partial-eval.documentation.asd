@@ -18,5 +18,8 @@
   :depends-on (:hu.dwim.partial-eval.test
                :hu.dwim.wui)
   :components ((:module "documentation"
-                :components ((:file "partial-eval" :depends-on ("package"))
-                             (:file "package")))))
+                :components ((:file "adventures" :depends-on ("package"))
+                             (:file "install-guide" :depends-on ("package"))
+                             (:file "package")
+                             (:file "project" :depends-on ("package"))
+                             (:file "user-guide" :depends-on ("package"))))))
