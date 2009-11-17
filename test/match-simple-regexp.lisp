@@ -69,18 +69,6 @@
                 :eval-function-calls '(elt)
                 :inline-function-calls '(match-simple-regexp)))
 
-(def function replace-uninterned-symbols (form)
-  (bind ((index 0))
-    (labels ((recurse (form)
-               (cond ((consp form)
-                      (cons (recurse (car form))
-                            (recurse (cdr form))))
-                     ((and (symbolp form)
-                           (not (symbol-package form)))
-                      (incf index))
-                     (t form))))
-      (recurse form))))
-
 (def test test/match-simple-regexp/partial-eval ()
   (is (equal (partial-eval/match-simple-regexp '(match-simple-regexp "a" text))
              '(block nil

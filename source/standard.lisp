@@ -15,7 +15,7 @@
 (def layered-method eval-function-call? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
       (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= stringp symbolp
-                         integerp zerop plusp minusp < <= = >= > - + * / 1+ 1-))))
+                         integerp zerop plusp minusp evenp oddp < <= = >= > - + * / 1+ 1-))))
 
 ;;;;;;
 ;;; has-function-call-side-effect?
@@ -191,3 +191,17 @@
              (variable-type (name-of argument)))
         (make-instance 'constant-form :value (find-class (variable-type (name-of argument))))
         (call-next-layered-method))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql '*)) arguments)
+  (bind ((arguments-length (length arguments)))
+    (if (= 1 arguments-length)
+        (first-elt arguments)
+        (bind ((reduced-arguments (remove-if (lambda (argument)
+                                               (and (typep argument 'constant-form)
+                                                    (equal 1 (value-of argument))))
+                                             arguments)))
+          (if (= arguments-length (length reduced-arguments))
+              (call-next-layered-method)
+              (partial-eval-form (make-instance 'free-application-form
+                                                :operator operator
+                                                :arguments reduced-arguments)))))))

@@ -11,7 +11,12 @@
 
 (def suite* (test/integer-power :in test))
 
-(def function integer-power (base exponent)
+;;;;;;
+;;; integer-power/looop
+
+(def suite* (test/integer-power/loop :in test/integer-power))
+
+(def function integer-power/loop (base exponent)
   "A simple power function with non-negative integer EXPONENT."
   (loop
      :with result = 1
@@ -19,22 +24,58 @@
      :do (setf result (* base result))
      :finally (return result)))
 
-(def test test/integer-power/correctness ()
-  (is (= 1 (integer-power 10 0)))
-  (is (= 10 (integer-power 10 1)))
-  (is (= 100 (integer-power 10 2)))
-  (is (= 0 (integer-power 0 1)))
-  (is (= 0 (integer-power 0 10))))
+(def test test/integer-power/loop/correctness ()
+  (is (= 1 (integer-power/loop 10 0)))
+  (is (= 10 (integer-power/loop 10 1)))
+  (is (= 100 (integer-power/loop 10 2)))
+  (is (= 0 (integer-power/loop 0 1)))
+  (is (= 0 (integer-power/loop 0 10))))
 
-(def function partial-eval/integer-power (form)
+(def function partial-eval/integer-power/loop (form)
   (partial-eval form
                 :eval-function-calls '(ceiling)
-                :inline-function-calls '(integer-power)))
+                :inline-function-calls '(integer-power/loop)))
 
-(def test test/integer-power/partial-eval ()
-  (is (equal (partial-eval/integer-power '(integer-power base 0))
+(def test test/integer-power/loop/partial-eval ()
+  (is (equal (partial-eval/integer-power/loop '(integer-power/loop base 0))
              1))
-  (is (equal (partial-eval/integer-power '(integer-power base 1))
-             '(* base 1)))
-  (is (equal (partial-eval/integer-power '(integer-power base 4))
-             '(* base (* base (* base (* base 1)))))))
+  (is (equal (partial-eval/integer-power/loop '(integer-power/loop base 1))
+             'base))
+  (is (equal (partial-eval/integer-power/loop '(integer-power/loop base 4))
+             '(* base (* base (* base base))))))
+
+;;;;;;
+;;; integer-power/recursive
+
+(def suite* (test/integer-power/recursive :in test/integer-power))
+
+(def function integer-power/recursive (base exponent)
+  (cond ((zerop exponent)
+         1)
+        ((evenp exponent)
+         (let ((result (integer-power/recursive base (/ exponent 2))))
+           (* result result)))
+        (t
+         (* base (integer-power/recursive base (1- exponent))))))
+
+(def test test/integer-power/recursive/correctness ()
+  (is (= 1 (integer-power/recursive 10 0)))
+  (is (= 10 (integer-power/recursive 10 1)))
+  (is (= 100 (integer-power/recursive 10 2)))
+  (is (= 0 (integer-power/recursive 0 1)))
+  (is (= 0 (integer-power/recursive 0 10))))
+
+(def function partial-eval/integer-power/recursive (form)
+  (partial-eval form :inline-function-calls '(integer-power/recursive)))
+
+(def test test/integer-power/recursive/partial-eval ()
+  (is (equal (partial-eval/integer-power/recursive '(integer-power/recursive base 0))
+             1))
+  (is (equal (partial-eval/integer-power/recursive '(integer-power/recursive base 1))
+             'base))
+  (is (equal (partial-eval/integer-power/recursive '(integer-power/recursive base 3))
+             '(* base (* base base))))
+  (is (equal (replace-uninterned-symbols (partial-eval/integer-power/recursive '(integer-power/recursive base 7)))
+             (replace-uninterned-symbols '(* base
+                                           (let* ((#:g3215 (* base base)) (#:g3214 (* base #:g3215)))
+                                             (* #:g3214 #:g3214)))))))
