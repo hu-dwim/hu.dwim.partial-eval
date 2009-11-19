@@ -14,6 +14,7 @@
   :licence "BSD / Public domain"
   :description "Extensible partial evaluator"
   :depends-on (:hu.dwim.common
+               :hu.dwim.def
                :hu.dwim.defclass-star+hu.dwim.def+contextl
                :hu.dwim.logger
                :hu.dwim.syntax-sugar
@@ -22,11 +23,10 @@
                :swank)
   :components ((:module "source"
                 :components ((:file "api" :depends-on ("package"))
-                             (:file "configuration" :depends-on ("package"))
                              (:file "environment" :depends-on ("logger"))
-                             (:file "logger" :depends-on ("configuration"))
+                             (:file "logger" :depends-on ("package"))
                              (:file "package")
                              (:file "partial-eval" :depends-on ("api" "util" "source" "environment"))
-                             (:file "source" :depends-on ("configuration"))
+                             (:file "source" :depends-on ("package"))
                              (:file "standard" :depends-on ("partial-eval"))
                              (:file "util" :depends-on ("package"))))))

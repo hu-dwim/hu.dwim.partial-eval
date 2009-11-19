@@ -4,9 +4,9 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :common-lisp-user)
+(in-package :hu.dwim.util)
 
-(defpackage :hu.dwim.partial-eval.test
+(def package :hu.dwim.partial-eval.test
   (:use :contextl
         :hu.dwim.common
         :hu.dwim.defclass-star
@@ -14,4 +14,5 @@
         :hu.dwim.partial-eval
         :hu.dwim.stefil
         :hu.dwim.syntax-sugar
-        :hu.dwim.walker))
+        :hu.dwim.walker)
+  (:readtable-setup (setup-readtable/same-as-package :hu.dwim.partial-eval)))

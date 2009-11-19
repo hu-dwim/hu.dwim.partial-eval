@@ -4,9 +4,9 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :common-lisp-user)
+(in-package :hu.dwim.util)
 
-(defpackage :hu.dwim.partial-eval
+(def package :hu.dwim.partial-eval
   (:use :contextl
         :hu.dwim.asdf
         :hu.dwim.common
@@ -15,4 +15,5 @@
         :hu.dwim.logger
         :hu.dwim.syntax-sugar
         :hu.dwim.util
-        :hu.dwim.walker))
+        :hu.dwim.walker)
+  (:readtable-setup (enable-standard-hu.dwim-syntaxes)))
