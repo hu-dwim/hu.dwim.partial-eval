@@ -10,9 +10,7 @@
 
 (defsystem :hu.dwim.partial-eval.test
   :class hu.dwim.test-system
-  :setup-readtable-function-name "hu.dwim.partial-eval::setup-readtable"
   :author ("Levente Mészáros <levente.meszaros@gmail.com>")
-  :licence "BSD / Public domain"
   :description "Test suite for hu.dwim.partial-eval"
   :depends-on (:hu.dwim.partial-eval
                :hu.dwim.util.test)
