@@ -19,6 +19,7 @@
                              (:file "function" :depends-on ("suite"))
                              (:file "generic-function" :depends-on ("suite"))
                              (:file "integer-power" :depends-on ("suite"))
+                             (:file "intersection" :depends-on ("suite"))
                              (:file "list-append" :depends-on ("suite"))
                              (:file "make-instance" :depends-on ("suite"))
                              (:file "match-simple-regexp" :depends-on ("suite"))
