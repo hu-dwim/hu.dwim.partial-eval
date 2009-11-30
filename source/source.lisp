@@ -38,7 +38,7 @@
                        (for form = (handler-bind ((sb-int::simple-reader-package-error #'continue))
                                      (read stream #f stream)))
                        (until (eq form stream))
-                       (when (eq 'in-package (first form))
+                       (when (member (first form) '(common-lisp:in-package hu.dwim.common:in-package))
                          (setf *package* (find-package (second form)))
                          (awhen (cdr (assoc (package-name *package*) swank:*readtable-alist* :test 'string=))
                            (setf *readtable* it)))
