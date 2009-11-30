@@ -25,36 +25,40 @@
 ;;;;;;
 ;;; Assumptions
 
-(def function extend-assumptions (assumption)
+(def function extend-assumptions (assumption &optional (environment *environment*))
   (partial-eval.debug "Extending assumptions with ~A" assumption)
-  (push assumption (assumptions-of *environment*)))
+  (push assumption (assumptions-of environment)))
 
 ;;;;;;
 ;;; Variable bindings
 
-(def (function e) variable-binding (name)
+(def (function e) variable-binding (name &optional (environment *environment*))
   (assert (symbolp name))
-  (aprog1 (getf (bindings-of *environment*) name nil)
+  (aprog1 (getf (bindings-of environment) name nil)
     (partial-eval.debug "Retrieving variable binding ~A results in ~A" name it)))
 
-(def function (setf variable-binding) (new-value name)
+(def function (setf variable-binding) (new-value name &optional (environment *environment*))
   (partial-eval.debug "Changing variable binding ~A to ~A" name new-value)
   (assert (symbolp name))
-  (setf (getf (bindings-of *environment*) name) new-value))
+  (setf (getf (bindings-of environment) name) new-value))
 
-(def function extend-bindings (bindings)
+(def (function e) remove-variable-binding (name &optional (environment *environment*))
+  (partial-eval.debug "Removing variable binding ~A" name)
+  (remf (bindings-of environment) name))
+
+(def function extend-variable-bindings (bindings)
   (dolist (binding bindings)
     (setf (variable-binding (name-of binding)) (initial-value-of binding))))
 
 ;;;;;;
 ;;; Variable types
 
-(def (function e) variable-type (name)
+(def (function e) variable-type (name &optional (environment *environment*))
   (assert (symbolp name))
-  (aprog1 (getf (types-of *environment*) name t)
+  (aprog1 (getf (types-of environment) name t)
     (partial-eval.debug "Retrieving variable type ~A results in ~A" name it)))
 
-(def function (setf variable-type) (new-value name)
+(def function (setf variable-type) (new-value name &optional (environment *environment*))
   (partial-eval.debug "Changing variable type ~A to ~A" name new-value)
   (assert (symbolp name))
-  (setf (getf (types-of *environment*) name) new-value))
+  (setf (getf (types-of environment) name) new-value))
