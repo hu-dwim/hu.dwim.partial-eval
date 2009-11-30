@@ -29,19 +29,52 @@
 ;;; function-call-return-value
 
 (def layered-method function-call-return-value :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'not)) arguments)
-  (bind ((result (return-value (first (arguments-of ast)))))
-    (if (typep result 'constant-form)
-        (make-instance 'constant-form :value (not (value-of result)))
-        (make-instance 'free-application-form
-                       :operator 'not
-                       :arguments (list result)))))
+  (bind ((first-argument (first (arguments-of ast)))
+         (result (return-value first-argument)))
+    (cond ((typep result 'constant-form)
+           (make-instance 'constant-form :value (not (value-of result))))
+          ((and (never? (has-side-effect? first-argument))
+                (never? (exits-non-locally? first-argument)))
+           (make-instance 'free-application-form
+                          :operator 'not
+                          :arguments (list result))))))
+
+;;;;;;
+;;; function-call-return-value
+
+(def layered-method function-call-return-type :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list)) arguments)
+  (if (null arguments)
+      'null
+      'cons))
 
 ;;;;;;
 ;;; partial-eval-function-call
 
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'eql)) arguments)
+  (bind ((first-argument (first arguments))
+         (second-argument (second arguments)))
+    (if (and (typep first-argument 'variable-reference-form)
+             (typep second-argument 'variable-reference-form)
+             (eq (name-of first-argument)
+                 (name-of second-argument)))
+        (make-instance 'constant-form :value #t)
+        (call-next-layered-method))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'atom)) arguments)
+  (bind ((argument (first arguments)))
+    (cond ((and (typep argument 'free-application-form)
+                (eq 'list (operator-of argument))
+                (> (length (arguments-of argument)) 0))
+           (make-instance 'constant-form :value #f))
+          ((and (typep argument 'free-application-form)
+                (eq 'list* (operator-of argument))
+                (> (length (arguments-of argument)) 1))
+           (make-instance 'constant-form :value #f))
+          (t (call-next-layered-method)))))
+
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'values)) arguments)
   (if (length= 1 arguments)
-      (first-elt arguments)
+      (first arguments)
       (call-next-layered-method)))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'apply)) arguments)
@@ -150,6 +183,18 @@
            (make-instance 'constant-form :value #f))
           (t (call-next-layered-method)))))
 
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'endp)) arguments)
+  (bind ((argument (first arguments)))
+    (cond ((and (typep argument 'free-application-form)
+                (eq 'list (operator-of argument))
+                (> (length (arguments-of argument)) 0))
+           (make-instance 'constant-form :value #f))
+          ((and (typep argument 'free-application-form)
+                (eq 'list* (operator-of argument))
+                (> (length (arguments-of argument)) 1))
+           (make-instance 'constant-form :value #f))
+          (t (call-next-layered-method)))))
+
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'consp)) arguments)
      (bind ((argument (first arguments)))
        (cond ((and (typep argument 'free-application-form)
@@ -195,7 +240,7 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql '*)) arguments)
   (bind ((arguments-length (length arguments)))
     (if (= 1 arguments-length)
-        (first-elt arguments)
+        (first arguments)
         (bind ((reduced-arguments (remove-if (lambda (argument)
                                                (and (typep argument 'constant-form)
                                                     (equal 1 (value-of argument))))
