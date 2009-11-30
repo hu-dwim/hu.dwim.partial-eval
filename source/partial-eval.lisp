@@ -133,8 +133,32 @@
       (return-value (last-elt (body-of ast)))
       (call-next-layered-method)))
 
+(def layered-method return-value ((ast block-form))
+  (if (block-referenced? ast ast)
+      ast
+      (call-next-layered-method)))
+
 (def layered-method return-value ((ast free-application-form))
   (function-call-return-value ast (operator-of ast) (arguments-of ast)))
+
+;;;;;;
+;;; collect-return-values
+
+(def layered-method collect-return-values ((ast walked-form))
+  (list ast))
+
+(def layered-method collect-return-values ((ast implicit-progn-mixin))
+  (collect-return-values (last-elt (body-of ast))))
+
+(def layered-method collect-return-values ((block block-form))
+  (append (prog1-bind return-values nil
+            (map-ast (lambda (ast)
+                       (when (and (typep ast 'return-from-form)
+                                  (eq block (target-block-of ast)))
+                         (setf return-values (nconc (collect-return-values (result-of ast)) return-values)))
+                       ast)
+                     block))
+          (call-next-layered-method)))
 
 ;;;;;;
 ;;; function-call-return-value
@@ -351,25 +375,25 @@
                                                                                                 (supplied-p-parameter-name-of argument-definition)))
                                         (function-argument-form (list (name-of argument-definition)))))
                                     argument-definitions))
-           ;; TODO: remove this eval and use alexandria
+           ;; KLUDGE: TODO: remove this eval and use alexandria
            (evaluated-values (eval `(destructuring-bind
                                           ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
                                                                                :arguments argument-definitions
                                                                                :body nil)))
                                         ,(list 'quote (mapcar 'partial-eval-form argument-values))
                                       (list ,@argument-names)))))
-      (extend-bindings (mapcar (lambda (name value)
-                                 (make-instance 'lexical-variable-binding-form
-                                                :name name
-                                                :initial-value (etypecase value
-                                                                 (walked-form value)
-                                                                 (cons (if (constant-values? value)
-                                                                           (constant-values value)
-                                                                           (make-instance 'free-application-form
-                                                                                          :operator 'list
-                                                                                          :arguments value)))
-                                                                 (t (make-instance 'constant-form :value value)))))
-                               argument-names evaluated-values)))))
+      (extend-variable-bindings (mapcar (lambda (name value)
+                                          (make-instance 'lexical-variable-binding-form
+                                                         :name name
+                                                         :initial-value (etypecase value
+                                                                          (walked-form value)
+                                                                          (cons (if (constant-values? value)
+                                                                                    (constant-values value)
+                                                                                    (make-instance 'free-application-form
+                                                                                                   :operator 'list
+                                                                                                   :arguments value)))
+                                                                          (t (make-instance 'constant-form :value value)))))
+                                        argument-names evaluated-values)))))
 
 ;;;;;;
 ;;; partial-eval-implicit-progn
@@ -423,44 +447,79 @@
 
 (def layered-method partial-eval-form ((ast if-form))
   (bind ((evaluated-condition (partial-eval-form (condition-of ast)))
-         (evaluated-condition-return-value (return-value evaluated-condition)))
-    (flet ((partial-eval-then ()
-             (bind ((form (if (typep evaluated-condition 'constant-form)
-                              (unwalk-form (condition-of ast))
-                              (unwalk-form evaluated-condition))))
-               (if (and (consp form)
-                        (member (first form) '(eq eql =)))
-                   (extend-assumptions form)
-                   (extend-assumptions `(not (eq #f ,form))))
-               (partial-eval-form (then-of ast))))
-           (partial-eval-else ()
-             (bind ((form (if (typep evaluated-condition 'constant-form)
-                              (unwalk-form (condition-of ast))
-                              (unwalk-form evaluated-condition))))
-               (extend-assumptions `(eq #f ,form))
-               (partial-eval-form (else-of ast)))))
+         (evaluated-condition-return-value (return-value evaluated-condition))
+         (evaluated-condition-return-type (if evaluated-condition-return-value
+                                              (return-type evaluated-condition-return-value)
+                                              (return-type evaluated-condition))))
+    (labels ((partial-eval-then ()
+               (bind ((form (if (typep evaluated-condition 'constant-form)
+                                (unwalk-form (condition-of ast))
+                                (unwalk-form evaluated-condition))))
+                 (if (and (consp form)
+                          (member (first form) '(eq eql =)))
+                     (extend-assumptions form)
+                     (extend-assumptions `(not (eq #f ,form))))
+                 (partial-eval-form (then-of ast))))
+             (partial-eval-else ()
+               (bind ((form (if (typep evaluated-condition 'constant-form)
+                                (unwalk-form (condition-of ast))
+                                (unwalk-form evaluated-condition))))
+                 (extend-assumptions `(eq #f ,form))
+                 (partial-eval-form (else-of ast))))
+             (partial-eval-branch (condition?)
+               (bind ((outer-environment *environment*)
+                      (branch-environment (clone-environment))
+                      (*environment* branch-environment)
+                      (evaluated-branch (if condition?
+                                            (partial-eval-then)
+                                            (partial-eval-else)))
+                      (runtime-bindings (iter (for (name outer-value) :on (bindings-of outer-environment) :by #'cddr)
+                                              (for branch-value = (variable-binding name))
+                                              (unless (eq outer-value branch-value)
+                                                (setf (variable-binding name outer-environment) nil)
+                                                (when branch-value
+                                                  (collect (make-instance 'setq-form
+                                                                          :variable (make-instance 'variable-reference-form :name name)
+                                                                          :value branch-value)))))))
+                 (if runtime-bindings
+                     (if (and (length= 1 runtime-bindings)
+                              (eq evaluated-branch (value-of (first runtime-bindings))))
+                         (make-instance 'setq-form
+                                        :variable (variable-of (first runtime-bindings))
+                                        :value evaluated-branch)
+                         (make-instance 'multiple-value-prog1-form
+                                        :first-form evaluated-branch
+                                        :other-forms runtime-bindings))
+                     evaluated-branch))))
       (partial-eval.debug "If condition evaluated to ~A" evaluated-condition)
-      (if (typep evaluated-condition-return-value 'constant-form)
-          (bind ((evaluated-branch (if (value-of evaluated-condition-return-value)
+      (if (or (typep evaluated-condition-return-value 'constant-form)
+              (subtypep evaluated-condition-return-type 'null)
+              (subtypep evaluated-condition-return-type '(not null)))
+          (bind ((evaluated-branch (if (or (and evaluated-condition-return-value
+                                                (value-of evaluated-condition-return-value))
+                                           (subtypep evaluated-condition-return-type '(not null)))
                                        (partial-eval-then)
                                        (partial-eval-else))))
-            (if (not (never? (has-side-effect? evaluated-condition)))
-                (make-progn-form (list evaluated-condition evaluated-branch))
-                evaluated-branch))
+            (if (and (never? (has-side-effect? evaluated-condition))
+                     (never? (exits-non-locally? evaluated-condition)))
+                evaluated-branch
+                (make-progn-form (list evaluated-condition evaluated-branch))))
           (bind ((negeated-condition? (and (typep evaluated-condition 'free-application-form)
                                            (eq 'not (operator-of evaluated-condition)))))
+            (iter (for return-value :in (collect-return-values evaluated-condition))
+                  (when (and (never? (has-side-effect? return-value))
+                             (never? (exits-non-locally? return-value)))
+                    (bind ((type (return-type return-value)))
+                      (cond ((subtypep type '(not null))
+                             (change-class return-value 'constant-form :value #t))
+                            ((subtypep type 'null)
+                             (change-class return-value 'constant-form :value #f))))))
             (make-instance 'if-form
                            :condition (if negeated-condition?
                                           (first (arguments-of evaluated-condition))
                                           evaluated-condition)
-                           :then (bind ((*environment* (clone-environment)))
-                                   (if negeated-condition?
-                                       (partial-eval-else)
-                                       (partial-eval-then)))
-                           :else (bind ((*environment* (clone-environment)))
-                                   (if negeated-condition?
-                                       (partial-eval-then)
-                                       (partial-eval-else)))))))))
+                           :then (partial-eval-branch (not negeated-condition?))
+                           :else (partial-eval-branch negeated-condition?)))))))
 
 (def layered-method partial-eval-form ((ast progn-form))
   (partial-eval-implicit-progn ast))
@@ -492,11 +551,12 @@
                          (partial-eval-form (result-of non-local-exit)))
                (partial-eval.debug "Eliminated ~A by ~A, result is ~A" ast (first non-local-exits) it))))
           ((block-referenced? ast evaluated-body)
-           (make-instance 'block-form
-                          :name (name-of ast)
-                          :body (if (typep evaluated-body 'progn-form)
-                                    (body-of evaluated-body)
-                                    (list evaluated-body))))
+           ;; NOTE: keep the identity, so that we don't break referring return-from forms
+           (setf (body-of ast)
+                 (if (typep evaluated-body 'progn-form)
+                     (body-of evaluated-body)
+                     (list evaluated-body)))
+           ast)
           (t evaluated-body))))
 
 (def layered-method partial-eval-form ((ast return-from-form))
@@ -527,6 +587,7 @@
           (return
             (if (or always-go?
                     (null gos))
+                ;; TODO: KLUDGE: what do we do with go forms down the tree?
                 (bind ((result (remove-if (of-type '(or go-form go-tag-form)) result))
                        (result-ast (make-progn-form result)))
                   (aprog1 (if (or (never? (returns-locally? result-ast))
@@ -565,7 +626,7 @@
                                               :initial-value value)))
                            (bindings-of ast))))
     (unless let*-form?
-      (extend-bindings bindings))
+      (extend-variable-bindings bindings))
     (bind ((evaluated-body (partial-eval-implicit-progn ast))
            (body (make-progn-form evaluated-body))
            (runtime-bindings (iter (for binding :in bindings)
@@ -682,11 +743,11 @@
 
 (def layered-method partial-eval-form ((ast flet-form))
   ;; TODO: really?
-  (extend-bindings (mapcar (lambda (binding)
-                             (make-instance 'lexical-variable-binding-form
-                                            :name (name-of binding)
-                                            :initial-value binding))
-                           (bindings-of ast)))
+  (extend-variable-bindings (mapcar (lambda (binding)
+                                      (make-instance 'lexical-variable-binding-form
+                                                     :name (name-of binding)
+                                                     :initial-value binding))
+                                    (bindings-of ast)))
   (partial-eval.debug "Evaluating flet function ~A" ast)
   (partial-eval-implicit-progn ast))
 
