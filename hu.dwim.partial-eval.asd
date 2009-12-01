@@ -11,8 +11,7 @@
 (defsystem :hu.dwim.partial-eval
   :class hu.dwim.system
   :author ("Levente Mészáros <levente.meszaros@gmail.com>")
-  :licence "BSD / Public domain"
-  :description "Extensible partial evaluator"
+  :description "Extensible partial evaluator."
   :depends-on (:hu.dwim.common
                :hu.dwim.def
                :hu.dwim.defclass-star+hu.dwim.def+contextl

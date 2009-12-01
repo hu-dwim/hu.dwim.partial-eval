@@ -10,10 +10,8 @@
 
 (defsystem :hu.dwim.partial-eval.test
   :class hu.dwim.test-system
-  :author ("Levente Mészáros <levente.meszaros@gmail.com>")
-  :description "Test suite for hu.dwim.partial-eval"
   :depends-on (:hu.dwim.partial-eval
-               :hu.dwim.util.test)
+               :hu.dwim.stefil+hu.dwim.def+swank)
   :components ((:module "test"
                 :components ((:file "class" :depends-on ("suite"))
                              (:file "function" :depends-on ("suite"))
