@@ -388,7 +388,7 @@
                                                          :initial-value (etypecase value
                                                                           (walked-form value)
                                                                           (cons (if (constant-values? value)
-                                                                                    (constant-values value)
+                                                                                    (make-instance 'constant-form :value (constant-values value))
                                                                                     (make-instance 'free-application-form
                                                                                                    :operator 'list
                                                                                                    :arguments value)))
