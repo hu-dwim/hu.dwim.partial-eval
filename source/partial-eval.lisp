@@ -720,6 +720,7 @@
                   (*function-call-inline-level* (1+ *function-call-inline-level*)))
              (aprog1 (restart-case
                          (if source
+                             ;; TODO: correctly shadow bindings
                              (bind ((*environment* (clone-environment))
                                     (lambda-ast (walk-form source)))
                                (bind ((*print-level* 3))
@@ -755,6 +756,7 @@
   (partial-eval-implicit-progn ast))
 
 (def layered-method partial-eval-form ((ast lexical-application-form))
+  ;; TODO: correctly shadow bindings
   (bind ((*environment* (clone-environment))
          (lambda-ast (definition-of ast))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
@@ -764,6 +766,7 @@
       (partial-eval.debug "Result for lexical function application ~A is ~A" (operator-of ast) it))))
 
 (def layered-method partial-eval-form ((ast lambda-application-form))
+  ;; TODO: correctly shadow bindings
   (bind ((*environment* (clone-environment))
          (argument-definitions (arguments-of (operator-of ast)))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
