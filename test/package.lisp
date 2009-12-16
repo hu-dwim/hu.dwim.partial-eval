@@ -14,5 +14,6 @@
         :hu.dwim.partial-eval
         :hu.dwim.stefil
         :hu.dwim.syntax-sugar
+        :hu.dwim.util
         :hu.dwim.walker)
   (:readtable-setup (setup-readtable/same-as-package :hu.dwim.partial-eval)))
