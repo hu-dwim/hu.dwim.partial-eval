@@ -62,15 +62,14 @@
 
 (def function make-generic-method-lambda-form (method)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-pcl:method-lambda-list method)))
-         (form (cddr (read-source-form method))))
+         (form (read-source-form method)))
     (with-unique-names (arguments methods)
       `(lambda (,arguments ,methods)
          (destructuring-bind ,(append required-arguments other-arguments?) ,arguments
            ;; KLUDGE: TODO: this is pretty much broken
-           ,@(bind ((form (remove-if (lambda (element)
-                                       (member element '(:before :around :after)))
-                                     form)))
-                   (nthcdr (1+ (position-if #'consp form)) form)))))))
+           ,@(cddr (remove-if (lambda (element)
+                                (member element '(closer-mop:defmethod common-lisp:defmethod def method :before :around :after)))
+                              form)))))))
 
 (def function make-generic-function-discriminating-form (function arguments-list)
   (bind (((:values required-arguments other-arguments?) (split-function-lambda-list (sb-mop:generic-function-lambda-list function)))
