@@ -14,13 +14,21 @@
 
 (def layered-method eval-function-call? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator '(eq eql not null endp atom car cdr consp first second third fourth length getf char= stringp symbolp
+      (member operator '(eq eql not null endp atom car cdr consp rest first second third fourth length getf char= stringp symbolp
                          integerp zerop plusp minusp evenp oddp < <= = >= > - + * / 1+ 1-))))
 
 ;;;;;;
 ;;; has-function-call-side-effect?
 
 (def layered-method has-function-call-side-effect? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
+  (if (member operator '(cons list list*))
+      :never
+      (call-next-layered-method)))
+
+;;;;;;
+;;; exits-function-call-non-locally?
+
+(def layered-method exits-function-call-non-locally? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
   (if (member operator '(cons list list*))
       :never
       (call-next-layered-method)))
