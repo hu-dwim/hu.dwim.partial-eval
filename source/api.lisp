@@ -45,6 +45,9 @@
 (def (layered-function e) exits-non-locally? (ast)
   (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the non local exits in all possible environments."))
 
+(def (layered-function e) exits-function-call-non-locally? (ast operator arguments)
+  (:documentation "Takes the original AST, the function NAME symbol, and all function ARGUMENTS already partially evaluated. Returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the non local exits in all possible environments."))
+
 (def (layered-function e) has-side-effect? (ast)
   (:documentation "Takes an AST and returns one of :NEVER, :UNKNOWN or :ALWAYS depending on the side effects in all possible environments."))
 

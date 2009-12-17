@@ -170,7 +170,9 @@
                   ,@declarations
                   ,@body)))
             ((and (eq 'def (first form))
-                  (eq 'function (second form))
+                  (or (eq 'function (second form))
+                      (and (consp (second form))
+                           (eq 'function (first (second form)))))
                   (equal function-name (third form)))
              (bind (((:values body declarations nil) (parse-body (cddddr form) :documentation #t)))
                `(lambda ,(cadddr form)

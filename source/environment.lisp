@@ -16,11 +16,17 @@
    (bindings nil :documentation "A list of alternating name value pairs, where name is a symbol and value is a walked-form")
    (types nil :documentation "A list of alternating name type pairs, where name is a symbol and type is a type designator")))
 
-(def function clone-environment (&optional (environment *environment*))
+(def function fork-environment (&optional (environment *environment*))
   (make-instance 'environment
                  :assumptions (copy-seq (assumptions-of environment))
                  :bindings (copy-seq (bindings-of environment))
                  :types (copy-seq (types-of environment))))
+
+(def function clone-environment (&optional (environment *environment*))
+  (make-instance 'environment
+                 :assumptions (assumptions-of environment)
+                 :bindings (bindings-of environment)
+                 :types (types-of environment)))
 
 ;;;;;;
 ;;; Assumptions
@@ -46,9 +52,9 @@
   (partial-eval.debug "Removing variable binding ~A" name)
   (remf (bindings-of environment) name))
 
-(def function extend-variable-bindings (bindings)
-  (dolist (binding bindings)
-    (setf (variable-binding (name-of binding)) (initial-value-of binding))))
+(def function extend-variable-bindings (name value &optional (environment *environment*))
+  (push value (bindings-of environment))
+  (push name (bindings-of environment)))
 
 ;;;;;;
 ;;; Variable types

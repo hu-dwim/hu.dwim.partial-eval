@@ -33,8 +33,8 @@
 
 (def function partial-eval/integer-power/loop (form)
   (partial-eval form
-                :eval-function-calls '(ceiling)
-                :inline-function-calls '(integer-power/loop)))
+                :eval-functions '(ceiling)
+                :inline-functions '(integer-power/loop)))
 
 (def test test/integer-power/loop/partial-eval ()
   (is (equal (partial-eval/integer-power/loop '(integer-power/loop base 0))
@@ -66,7 +66,7 @@
   (is (= 0 (integer-power/recursive 0 10))))
 
 (def function partial-eval/integer-power/recursive (form)
-  (partial-eval form :inline-function-calls '(integer-power/recursive)))
+  (partial-eval form :inline-functions '(integer-power/recursive)))
 
 (def test test/integer-power/recursive/partial-eval ()
   (is (equal (partial-eval/integer-power/recursive '(integer-power/recursive base 0))

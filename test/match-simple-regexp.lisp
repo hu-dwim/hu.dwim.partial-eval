@@ -66,8 +66,8 @@
 
 (def function partial-eval/match-simple-regexp (form)
   (partial-eval form
-                :eval-function-calls '(elt)
-                :inline-function-calls '(match-simple-regexp)))
+                :eval-functions '(elt)
+                :inline-functions '(match-simple-regexp)))
 
 (def test test/match-simple-regexp/partial-eval ()
   (is (equal (partial-eval/match-simple-regexp '(match-simple-regexp "a" text))

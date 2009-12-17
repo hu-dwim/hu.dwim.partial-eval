@@ -47,6 +47,9 @@
       'null
       'cons))
 
+(def layered-method function-call-return-type :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cons)) arguments)
+  'cons)
+
 ;;;;;;
 ;;; partial-eval-function-call
 
@@ -134,6 +137,9 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'car)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
+                (eq 'cons (operator-of argument)))
+           (partial-eval-form (first (arguments-of argument))))
+          ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
            (partial-eval-form (first (arguments-of argument))))
           ((and (typep argument 'free-application-form)
@@ -145,6 +151,9 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cdr)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
+                (eq 'cons (operator-of argument)))
+           (partial-eval-form (second (arguments-of argument))))
+          ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument)))
            (partial-eval-form (make-instance 'free-application-form
                                              :operator 'list
@@ -186,6 +195,9 @@
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'endp)) arguments)
   (bind ((argument (first arguments)))
     (cond ((and (typep argument 'free-application-form)
+                (eq 'cons (operator-of argument)))
+           (make-instance 'constant-form :value #f))
+          ((and (typep argument 'free-application-form)
                 (eq 'list (operator-of argument))
                 (> (length (arguments-of argument)) 0))
            (make-instance 'constant-form :value #f))

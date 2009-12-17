@@ -148,7 +148,17 @@
   (let () a) -> a
   (let () 1 a) -> a
   (let ((a 1)) a) -> 1
-  (let ((a b)) a) -> b)
+  (let ((a b)) a) -> b
+  (let ((a 1))
+    (let ((a 2)
+          (b a))
+      (= a b))) -> #f
+  (let ((a 1))
+    (list a
+          (let ((a 2)
+                (b (setf a 3)))
+            (= a b))
+          a)) -> (list 1 #f 3))
 
 ;;;;;;
 ;;; let*
@@ -160,7 +170,16 @@
   (let* () a) -> a
   (let* () 1 a) -> a
   (let* ((a 1)) a) -> 1
-  (let* ((a b)) a) -> b)
+  (let* ((a b)) a) -> b
+  (let* ((a 1)
+         (b a))
+    (= a b)) -> #t
+  (let ((a 1))
+    (list a
+          (let* ((a 2)
+                 (b (setf a 3)))
+            (= a b))
+          a)) -> (list 1 #t 1))
 
 ;;;;;;
 ;;; setq

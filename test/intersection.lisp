@@ -20,7 +20,7 @@
                 do (return-from nil cell)))))
 
 (def function partial-eval/intersection (form)
-  (partial-eval form :inline-function-calls '(intersection member)))
+  (partial-eval form :inline-functions '(intersection member)))
 
 (def test test/intersection/partial-eval ()
   (is (equal (partial-eval/intersection '(intersection nil a)) nil))

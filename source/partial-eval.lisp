@@ -10,15 +10,17 @@
 ;;; partial-eval-layer
 
 (def (layer* e) partial-eval-layer ()
-  ((eval-function-calls)
-   (lookup-variable-values)
-   (inline-function-calls)))
+  ((eval-functions)
+   (inline-functions)
+   (side-effect-free-functions)
+   (non-local-exit-free-functions)
+   (lookup-variable-values)))
 
-(def constant +default-function-call-inline-limit+ 10)
+(def special-variable *function-call-inline-limit* 10)
 
 (def special-variable *function-call-inline-level*)
 
-(def constant +default-tagbody-go-unroll-limit+ 10)
+(def special-variable *tagbody-go-unroll-limit* 10)
 
 ;;;;;;
 ;;; may-type
@@ -76,7 +78,7 @@
 
 (def layered-method eval-function-call? :in partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator (eval-function-calls-of (current-layer-prototype)) :test #'equal)))
+      (member operator (eval-functions-of (current-layer-prototype)) :test #'equal)))
 
 ;;;;;;
 ;;; inline-function-call?
@@ -86,7 +88,7 @@
 
 (def layered-method inline-function-call? :in partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator (inline-function-calls-of (current-layer-prototype)) :test #'equal)))
+      (member operator (inline-functions-of (current-layer-prototype)) :test #'equal)))
 
 ;;;;;;
 ;;; lookup-variable-value?
@@ -246,7 +248,21 @@
   :never)
 
 (def layered-method exits-non-locally? ((ast free-application-form))
-  :never)
+  (if (and (never? (may-or* (arguments-of ast) :key 'exits-non-locally?))
+           (eval-function-call? ast (operator-of ast) (arguments-of ast)))
+      :never
+      (exits-function-call-non-locally? ast (operator-of ast) (arguments-of ast))))
+
+;;;;;;
+;;; exits-function-call-non-locally?
+
+(def layered-method exits-function-call-non-locally? ((ast free-application-form) operator arguments)
+  :unknown)
+
+(def layered-method exits-function-call-non-locally? :in partial-eval-layer ((ast free-application-form) operator arguments)
+  (if (member operator (non-local-exit-free-functions-of (current-layer-prototype)) :test #'equal)
+      :never
+      (call-next-layered-method)))
 
 ;;;;;;
 ;;; collect-non-local-exits
@@ -349,6 +365,11 @@
 (def layered-method has-function-call-side-effect? ((ast free-application-form) operator arguments)
   :unknown)
 
+(def layered-method has-function-call-side-effect? :in partial-eval-layer ((ast free-application-form) operator arguments)
+  (if (member operator (side-effect-free-functions-of (current-layer-prototype)) :test #'equal)
+      :never
+      (call-next-layered-method)))
+
 ;;;;;;
 ;;; collect-side-effects
 
@@ -382,18 +403,18 @@
                                                                                :body nil)))
                                         ,(list 'quote (mapcar 'partial-eval-form argument-values))
                                       (list ,@argument-names)))))
-      (extend-variable-bindings (mapcar (lambda (name value)
-                                          (make-instance 'lexical-variable-binding-form
-                                                         :name name
-                                                         :initial-value (etypecase value
-                                                                          (walked-form value)
-                                                                          (cons (if (constant-values? value)
-                                                                                    (make-instance 'constant-form :value (constant-values value))
-                                                                                    (make-instance 'free-application-form
-                                                                                                   :operator 'list
-                                                                                                   :arguments value)))
-                                                                          (t (make-instance 'constant-form :value value)))))
-                                        argument-names evaluated-values)))))
+      (iter (for argument-name :in argument-names)
+            (for evaluated-value :in evaluated-values)
+            (extend-variable-bindings argument-name
+                                      (etypecase evaluated-value
+                                        (walked-form evaluated-value)
+                                        ;; TODO: get rid of this as soon as we handle &key (a nil a?) above for a?
+                                        (cons (if (constant-values? evaluated-value)
+                                                  (make-instance 'constant-form :value (constant-values evaluated-value))
+                                                  (make-instance 'free-application-form
+                                                                 :operator 'list
+                                                                 :arguments evaluated-value)))
+                                        (t (make-instance 'constant-form :value evaluated-value))))))))
 
 ;;;;;;
 ;;; partial-eval-implicit-progn
@@ -468,8 +489,7 @@
                  (partial-eval-form (else-of ast))))
              (partial-eval-branch (condition?)
                (bind ((outer-environment *environment*)
-                      (branch-environment (clone-environment))
-                      (*environment* branch-environment)
+                      (*environment* (fork-environment))
                       (evaluated-branch (if condition?
                                             (partial-eval-then)
                                             (partial-eval-else)))
@@ -567,7 +587,7 @@
 (def layered-method partial-eval-form ((ast tagbody-form))
   (iter (with body = ast)
         (for go-count :from 0)
-        (when (= go-count +default-tagbody-go-unroll-limit+)
+        (when (= go-count *tagbody-go-unroll-limit*)
           (partial-eval.debug "Too many go statements evaluated, giving up unrolling ~A" ast)
           (return ast))
         (for evaluated-body = (partial-eval-implicit-progn body))
@@ -614,69 +634,82 @@
                        :value value)
         (setf (variable-binding (name-of variable)) value))))
 
-(def layered-method partial-eval-form ((ast lexical-variable-binder-form))
-  (bind ((let*-form? (typep ast 'let*-form))
+(def function partial-eval-variable-binding-body (ast bindings)
+  (bind ((evaluated-body (partial-eval-implicit-progn ast))
+         (body (make-progn-form evaluated-body))
+         (runtime-bindings (iter (for binding :in bindings)
+                                 (for name = (name-of binding))
+                                 (for variable-referenced? = (variable-referenced? name evaluated-body))
+                                 (for initial-value = (initial-value-of binding))
+                                 (for has-side-effect? = (has-side-effect? initial-value))
+                                 (for exits-non-locally? = (exits-non-locally? initial-value))
+                                 (if (and (not (and (typep initial-value 'variable-reference-form)
+                                                    (eq name (name-of initial-value))))
+                                          variable-referenced?)
+                                     (collect binding)
+                                     (if (or (not (never? has-side-effect?))
+                                             (not (never? exits-non-locally?)))
+                                         (setf body (make-progn-form (list initial-value body))))))))
+    ;; make common subexpressions local variables
+    (bind ((seen-forms (make-hash-table)))
+      (map-ast (lambda (ast)
+                 (when (typep ast 'walked-form)
+                   (incf (gethash ast seen-forms 0)))
+                 (unless (typep ast 'binder-form-mixin)
+                   ast))
+               body)
+      (map nil 'funcall
+           (iter (for (key value) :in-hashtable seen-forms)
+                 (when (and (not (typep key '(or constant-form variable-reference-form lexical-variable-binding-form)))
+                            (never? (has-side-effect? key))
+                            (never? (exits-non-locally? key))
+                            (> value 1))
+                   (bind ((name (gensym)))
+                     (push (make-instance 'lexical-variable-binding-form
+                                          :name name
+                                          :initial-value (bind ((class (class-of key)))
+                                                           (prog1-bind clone (make-instance class)
+                                                             (dolist (slot (class-slots class))
+                                                               (when (slot-boundp-using-class class key slot)
+                                                                 (setf (slot-value-using-class class clone slot) (slot-value-using-class class key slot)))))))
+                           runtime-bindings)
+                     (map-ast (lambda (ast)
+                                (when (eq key ast)
+                                  (collect (bind ((key key))
+                                             (lambda ()
+                                               (change-class key 'lexical-variable-reference-form :name name)))))
+                                ast)
+                              body)))))
+      (if runtime-bindings
+          (make-instance 'let*-form ;; TODO: is this right?
+                         :bindings runtime-bindings
+                         :body (make-progn-form-body body))
+          (make-progn-form body)))))
+
+(def layered-method partial-eval-form ((ast let-form))
+  (bind ((*environment* (clone-environment))
          (bindings (mapcar (lambda (binding)
                              (bind ((name (name-of binding))
                                     (value (partial-eval-form (initial-value-of binding))))
-                               (when let*-form?
-                                 (setf (variable-binding name) value))
                                (make-instance 'lexical-variable-binding-form
                                               :name name
                                               :initial-value value)))
                            (bindings-of ast))))
-    (unless let*-form?
-      (extend-variable-bindings bindings))
-    (bind ((evaluated-body (partial-eval-implicit-progn ast))
-           (body (make-progn-form evaluated-body))
-           (runtime-bindings (iter (for binding :in bindings)
-                                   (for name = (name-of binding))
-                                   (for variable-referenced? = (variable-referenced? name evaluated-body))
-                                   (for initial-value = (initial-value-of binding))
-                                   (for has-side-effect? = (has-side-effect? initial-value))
-                                   (for exits-non-locally? = (exits-non-locally? initial-value))
-                                   (if (and (not (and (typep initial-value 'variable-reference-form)
-                                                      (eq name (name-of initial-value))))
-                                            variable-referenced?)
-                                       (collect binding)
-                                       (if (or (not (never? has-side-effect?))
-                                               (not (never? exits-non-locally?)))
-                                           (setf body (make-progn-form (list initial-value body))))))))
-      ;; make common subexpressions local variables
-      (bind ((seen-forms (make-hash-table)))
-        (map-ast (lambda (ast)
-                   (when (typep ast 'walked-form)
-                     (incf (gethash ast seen-forms 0)))
-                   (unless (typep ast 'binder-form-mixin)
-                     ast))
-                 body)
-        (map nil 'funcall
-             (iter (for (key value) :in-hashtable seen-forms)
-                   (when (and (not (typep key '(or constant-form variable-reference-form lexical-variable-binding-form)))
-                              (never? (has-side-effect? key))
-                              (never? (exits-non-locally? key))
-                              (> value 1))
-                     (bind ((name (gensym)))
-                       (push (make-instance 'lexical-variable-binding-form
-                                            :name name
-                                            :initial-value (bind ((class (class-of key)))
-                                                             (prog1-bind clone (make-instance class)
-                                                               (dolist (slot (class-slots class))
-                                                                 (when (slot-boundp-using-class class key slot)
-                                                                   (setf (slot-value-using-class class clone slot) (slot-value-using-class class key slot)))))))
-                             runtime-bindings)
-                       (map-ast (lambda (ast)
-                                  (when (eq key ast)
-                                    (collect (bind ((key key))
-                                               (lambda ()
-                                                 (change-class key 'lexical-variable-reference-form :name name)))))
-                                  ast)
-                                body)))))
-        (if runtime-bindings
-            (make-instance 'let*-form #+nil (class-of ast) ;; TODO: based on whether if runtime-bindings were extended
-                           :bindings runtime-bindings
-                           :body (make-progn-form-body body))
-            (make-progn-form body))))))
+    (iter (for binding :in bindings)
+          (extend-variable-bindings (name-of binding) (initial-value-of binding)))
+    (partial-eval-variable-binding-body ast bindings)))
+
+(def layered-method partial-eval-form ((ast let*-form))
+  (bind ((*environment* (clone-environment))
+         (bindings (mapcar (lambda (binding)
+                             (bind ((name (name-of binding))
+                                    (value (partial-eval-form (initial-value-of binding))))
+                               (extend-variable-bindings name value)
+                               (make-instance 'lexical-variable-binding-form
+                                              :name name
+                                              :initial-value value)))
+                           (bindings-of ast))))
+    (partial-eval-variable-binding-body ast bindings)))
 
 (def layered-method partial-eval-form ((ast variable-reference-form))
   (bind ((value (variable-binding (name-of ast))))
@@ -690,7 +723,9 @@
 
 (def layered-method partial-eval-form ((ast special-variable-reference-form))
   (bind ((name (name-of ast)))
-    (if (lookup-variable-value? ast name)
+    (if (or (and (constantp name)
+                 (boundp name))
+            (lookup-variable-value? ast name))
         (make-instance 'constant-form :value (symbol-value name))
         (call-next-layered-method))))
 
@@ -715,13 +750,12 @@
                (make-instance 'constant-form :value (apply operator (constant-values arguments)))
              (partial-eval.debug "Evaluating function call returned ~A" value)))
           ((and (inline-function-call? ast operator arguments)
-                (< *function-call-inline-level* +default-function-call-inline-limit+))
+                (< *function-call-inline-level* *function-call-inline-limit*))
            (bind ((source (make-function-lambda-form operator))
                   (*function-call-inline-level* (1+ *function-call-inline-level*)))
              (aprog1 (restart-case
                          (if source
-                             ;; TODO: correctly shadow bindings
-                             (bind ((*environment* (clone-environment))
+                             (bind ((*environment* (make-instance 'environment))
                                     (lambda-ast (walk-form source)))
                                (bind ((*print-level* 3))
                                  (partial-eval.debug "Inlining function call to ~A as ~A" operator source))
@@ -729,7 +763,7 @@
                                (partial-eval-implicit-progn lambda-ast))
                              (make-free-application-form operator arguments))
                        (give-up nil ast))
-               (partial-eval.debug "Result fo inlining function call to ~A is ~A" operator it))))
+               (partial-eval.debug "Result for inlining function call to ~A is ~A" operator it))))
           (t
            (partial-eval.debug "Partial evaluating function call to ~A with arguments ~A" operator arguments)
            (partial-eval-function-call ast operator arguments)))))
@@ -743,12 +777,6 @@
   (partial-eval-implicit-progn ast))
 
 (def layered-method partial-eval-form ((ast flet-form))
-  ;; TODO: really?
-  (extend-variable-bindings (mapcar (lambda (binding)
-                                      (make-instance 'lexical-variable-binding-form
-                                                     :name (name-of binding)
-                                                     :initial-value binding))
-                                    (bindings-of ast)))
   (partial-eval.debug "Evaluating flet function ~A" ast)
   (partial-eval-implicit-progn ast))
 
@@ -756,7 +784,6 @@
   (partial-eval-implicit-progn ast))
 
 (def layered-method partial-eval-form ((ast lexical-application-form))
-  ;; TODO: correctly shadow bindings
   (bind ((*environment* (clone-environment))
          (lambda-ast (definition-of ast))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
@@ -766,7 +793,6 @@
       (partial-eval.debug "Result for lexical function application ~A is ~A" (operator-of ast) it))))
 
 (def layered-method partial-eval-form ((ast lambda-application-form))
-  ;; TODO: correctly shadow bindings
   (bind ((*environment* (clone-environment))
          (argument-definitions (arguments-of (operator-of ast)))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
@@ -790,7 +816,7 @@
 
 (def (function e) partial-eval (form &key (layer 'standard-partial-eval-layer)
                                      assumptions bindings types
-                                     eval-function-calls inline-function-calls lookup-variable-values)
+                                     eval-functions inline-functions side-effect-free-functions non-local-exit-free-functions lookup-variable-values)
   "The function PARTIAL-EVAL takes a lisp FORM and returns another lisp FORM. The resulting form should, in all possible environments, produce the same return value(s), the same side effects in the same order, and the same non local exits (in and out), as the original FORM would have produced. The ENVIRONMENT parameter specifies the initial assumptions in which the form should be partially evaluated. The LAYER parameter provides a way to customize the standard partial evaluation logic to your needs."
   (bind ((*environment* (make-instance 'environment
                                        :assumptions assumptions
@@ -805,8 +831,10 @@
                                     ;; KLUDGE: unfortunately contextl does not support slot values in layers
                                     ;; TODO: this is not thread safe, maybe this should be part of the environment?
                                     (bind ((prototype (contextl::layer-context-prototype it)))
-                                      (setf (eval-function-calls-of prototype) eval-function-calls
-                                            (inline-function-calls-of prototype) inline-function-calls
+                                      (setf (eval-functions-of prototype) eval-functions
+                                            (inline-functions-of prototype) inline-functions
+                                            (side-effect-free-functions-of prototype) side-effect-free-functions
+                                            (non-local-exit-free-functions-of prototype) non-local-exit-free-functions
                                             (lookup-variable-values-of prototype) lookup-variable-values)))
                                   (lambda ()
                                     (unwalk-form (partial-eval-form (walk-form form))))))))

@@ -80,10 +80,10 @@
   (partial-eval form
                 :types types
                 :layer 'standard-partial-eval-layer
-                :eval-function-calls '(typep subtypep
-                                       ;; KLUDGE: TODO: eliminate these
-                                       list list*)
-                :inline-function-calls '(print-applied-method-information sb-int:proper-list-of-length-p)))
+                :eval-functions '(typep subtypep
+                                  ;; KLUDGE: TODO: eliminate these
+                                  list list*)
+                :inline-functions '(print-applied-method-information sb-int:proper-list-of-length-p)))
 
 (def test test/generic-function/print-applied-method-information/t ()
   (bind ((form '(progn

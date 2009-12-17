@@ -25,7 +25,7 @@
   (is (equal '(1 2 3 4 5 6) (list-append '(1 2 3) '(4 5 6)))))
 
 (def function partial-eval/list-append (form)
-  (partial-eval form :inline-function-calls '(list-append)))
+  (partial-eval form :inline-functions '(list-append)))
 
 (def test test/list-append/partial-eval ()
   (is (equal (partial-eval/list-append '(list-append '(1 2 3) list))
