@@ -18,6 +18,7 @@
                :hu.dwim.logger
                :hu.dwim.syntax-sugar
                :hu.dwim.util
+               :hu.dwim.util.source
                :hu.dwim.walker
                :swank)
   :components ((:module "source"

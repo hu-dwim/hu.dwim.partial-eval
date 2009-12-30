@@ -12,7 +12,7 @@
 (def suite* (test/intersection :in test))
 
 ;; KLUDGE: we can't read the source of member, because there's some optimization magic there and introspection does not work
-(setf (gethash 'member hu.dwim.partial-eval::*sources*)
+(setf (gethash 'member hu.dwim.partial-eval::*definition-lambda-forms*)
       '(lambda (element list &rest args)
         (block nil
           (loop for cell :on list
