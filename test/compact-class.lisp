@@ -13,8 +13,7 @@
   ((standard-slot)
    (compact-boolean-slot :type boolean :allocation :compact)
    (compact-integer-slot :type (integer 0 255) :allocation :compact)
-   (compact-base-char-slot :type base-char :allocation :compact)
-   (compact-single-float-slot :type single-float :allocation :compact))
+   (compact-base-char-slot :type base-char :allocation :compact))
   (:metaclass compact-class))
 
 (def layer make-instance/compact-class-layer (make-instance/with-slots-layer)
@@ -58,8 +57,7 @@
                                :standard-slot "Hello"
                                :compact-boolean-slot #t
                                :compact-integer-slot 12
-                               :compact-base-char-slot #\a
-                               :compact-single-float-slot 3.1415)
+                               :compact-base-char-slot #\a)
                              :types '(sb-kernel:instance compact-simple-test))
                `(let* ((sb-kernel:instance
                         (let* ((it
