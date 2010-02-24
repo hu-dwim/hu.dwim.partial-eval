@@ -104,9 +104,9 @@
                                      (arguments-of last-argument))))))
           (typecase function
             (constant-form
-             (partial-eval (make-instance 'free-application-form
-                                          :operator (value-of function)
-                                          :arguments arguments)))
+             (partial-eval-form (make-instance 'free-application-form
+                                               :operator (value-of function)
+                                               :arguments arguments)))
             (free-function-object-form
              (partial-eval-form (make-instance 'free-application-form
                                                :operator (name-of function)
@@ -122,9 +122,9 @@
   (bind ((function (first arguments)))
     (typecase function
       (constant-form
-       (partial-eval (make-instance 'free-application-form
-                                    :operator (value-of function)
-                                    :arguments (rest arguments))))
+       (partial-eval-form (make-instance 'free-application-form
+                                         :operator (value-of function)
+                                         :arguments (rest arguments))))
       (lexical-function-object-form
        (partial-eval-form (make-instance 'lexical-application-form
                                          :operator (name-of function)
