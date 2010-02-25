@@ -117,25 +117,26 @@
   (:method ((function function))
     (bind (((:values nil nil function-name) (function-lambda-expression function))
            (form (definition-source-form function)))
-      (cond ((and (eq 'defun (first form))
-                  (equal function-name (second form)))
-             ;; TODO: use walker
-             (bind (((:values body declarations nil) (parse-body (cdddr form) :documentation #t)))
-               `(lambda ,(caddr form)
-                  ,@declarations
-                  (block ,function-name
-                    ,@body))))
-            ((and (eq 'def (first form))
-                  (or (eq 'function (second form))
-                      (and (consp (second form))
-                           (eq 'function (first (second form)))))
-                  (equal function-name (third form)))
-             (bind (((:values body declarations nil) (parse-body (cddddr form) :documentation #t)))
-               `(lambda ,(cadddr form)
-                  ,@declarations
-                  (block ,function-name
-                    ,@body))))
-            (t nil))))
+      (labels ((%make-function-lambda-form (form)
+                 (cond ((and (eq 'defun (first form))
+                             (equal function-name (second form)))
+                        ;; TODO: use walker
+                        (bind (((:values body declarations nil) (parse-body (cdddr form) :documentation #t)))
+                          `(lambda ,(caddr form)
+                             ,@declarations
+                             (block ,function-name
+                               ,@body))))
+                       ((and (consp form)
+                             (macro-function (first form)))
+                        (%make-function-lambda-form (macroexpand-1 form)))
+                       ((and (consp form)
+                             (member (first form) '(progn locally)))
+                        (bind ((child-forms (mapcar #'%make-function-lambda-form (cdr form))))
+                          (when (= 1 (count-if-not 'null child-forms))
+                            (return-from %make-function-lambda-form (find-if-not 'null child-forms)))))
+                       (t
+                        nil))))
+        (%make-function-lambda-form form))))
 
   (:method ((function generic-function))
     (bind ((lambda-list (generic-function-lambda-list function))
