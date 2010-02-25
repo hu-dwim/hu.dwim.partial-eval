@@ -150,7 +150,9 @@
   (list ast))
 
 (def layered-method collect-return-values ((ast implicit-progn-mixin))
-  (collect-return-values (last-elt (body-of ast))))
+  (collect-return-values (aif (body-of ast)
+                              (last-elt it)
+                              (make-instance 'constant-form :value nil))))
 
 (def layered-method collect-return-values ((block block-form))
   (append (prog1-bind return-values nil
@@ -243,6 +245,9 @@
 
 (def layered-method exits-non-locally? ((ast walked-lexical-application-form))
   (exits-non-locally? (definition-of ast)))
+
+(def layered-method exits-non-locally? ((ast lambda-function-form))
+  :never)
 
 (def layered-method exits-non-locally? ((ast function-object-form))
   :never)
@@ -347,6 +352,9 @@
 (def layered-method has-side-effect? ((ast lexical-variable-binding-form))
   (has-side-effect? (initial-value-of ast)))
 
+(def layered-method has-side-effect? ((ast lambda-function-form))
+  :never)
+
 (def layered-method has-side-effect? ((ast function-object-form))
   :never)
 
@@ -390,19 +398,22 @@
 (def function partial-eval-lambda-list (argument-definitions argument-values)
   (when (or argument-definitions
             argument-values)
-    (bind ((argument-names (mappend (lambda (argument-definition)
-                                      (typecase argument-definition
-                                        (function-argument-form-with-supplied-p-parameter (list (name-of argument-definition)
-                                                                                                (supplied-p-parameter-name-of argument-definition)))
-                                        (function-argument-form (list (name-of argument-definition)))))
-                                    argument-definitions))
+    (bind ((argument-names (remove nil (mappend (lambda (argument-definition)
+                                                  (typecase argument-definition
+                                                    (function-argument-form-with-supplied-p-parameter (list (name-of argument-definition)
+                                                                                                            (supplied-p-parameter-name-of argument-definition)))
+                                                    (allow-other-keys-function-argument-form
+                                                     nil)
+                                                    (function-argument-form (list (name-of argument-definition)))))
+                                                argument-definitions)))
            ;; KLUDGE: TODO: remove this eval and use alexandria
-           (evaluated-values (eval `(destructuring-bind
-                                          ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
-                                                                               :arguments argument-definitions
-                                                                               :body nil)))
-                                        ,(list 'quote (mapcar 'partial-eval-form argument-values))
-                                      (list ,@argument-names)))))
+           (evaluated-values (mapcar 'walk-form ; KLUDGE: TODO: this is stupid, in what environment are we walking?
+                                     (eval `(destructuring-bind
+                                                  ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
+                                                                                       :arguments argument-definitions
+                                                                                       :body nil)))
+                                                ,(list 'quote (mapcar 'unwalk-form (mapcar 'partial-eval-form argument-values)))
+                                              (list ,@argument-names))))))
       (iter (for argument-name :in argument-names)
             (for evaluated-value :in evaluated-values)
             (extend-variable-bindings argument-name
@@ -534,12 +545,33 @@
                              (change-class return-value 'constant-form :value #t))
                             ((subtypep type 'null)
                              (change-class return-value 'constant-form :value #f))))))
-            (make-instance 'if-form
-                           :condition (if negeated-condition?
+            (bind ((runtime-condition (if negeated-condition?
                                           (first (arguments-of evaluated-condition))
-                                          evaluated-condition)
-                           :then (partial-eval-branch (not negeated-condition?))
-                           :else (partial-eval-branch negeated-condition?)))))))
+                                          evaluated-condition))
+                   (runtime-then (partial-eval-branch (not negeated-condition?)))
+                   (runtime-else (partial-eval-branch negeated-condition?)))
+              ;; TODO: find better aproach for these rules being applied recursievely!
+              ;; TODO: use fare-matcher, cl-unification or something
+              (cond ((and (typep runtime-then 'constant-form)
+                          (null (value-of runtime-then))
+                          (typep runtime-else 'constant-form)
+                          (null (value-of runtime-else)))
+                     (if (or (has-side-effect? runtime-condition)
+                             (exits-non-locally? runtime-condition))
+                         (make-instance 'progn-form :body (list runtime-condition (make-instance 'constant-form :value nil)))
+                         (make-instance 'constant-form :value nil)))
+                    ((and (or (eq runtime-condition runtime-then) ; NOTE: eq means the value is the same value runtime!
+                              (and (typep runtime-condition 'variable-reference-form)
+                                   (typep runtime-then 'variable-reference-form)
+                                   (eq (name-of runtime-condition) (name-of runtime-then))))
+                          (typep runtime-else 'constant-form)
+                          (null (value-of runtime-else)))
+                     runtime-condition)
+                    (t
+                     (make-instance 'if-form
+                                    :condition runtime-condition
+                                    :then runtime-then
+                                    :else runtime-else)))))))))
 
 (def layered-method partial-eval-form ((ast progn-form))
   (partial-eval-implicit-progn ast))
@@ -751,14 +783,15 @@
              (partial-eval.debug "Evaluating function call returned ~A" value)))
           ((and (inline-function-call? ast operator arguments)
                 (< *function-call-inline-level* *function-call-inline-limit*))
-           (bind ((source (make-function-lambda-form operator))
+           (bind ((form (make-function-lambda-form operator))
                   (*function-call-inline-level* (1+ *function-call-inline-level*)))
              (aprog1 (restart-case
-                         (if source
-                             (bind ((*environment* (make-instance 'environment))
-                                    (lambda-ast (walk-form source)))
+                         (if form
+                             ;; TODO: at least copy types for variable which are passed down
+                             (bind ((*environment* (make-instance 'environment :types (types-of *environment*)))
+                                    (lambda-ast (walk-form form)))
                                (bind ((*print-level* 3))
-                                 (partial-eval.debug "Inlining function call to ~A as ~A" operator source))
+                                 (partial-eval.debug "Inlining function call to ~A as ~A" operator form))
                                (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
                                (partial-eval-implicit-progn lambda-ast))
                              (make-free-application-form operator arguments))
