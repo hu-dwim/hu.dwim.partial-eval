@@ -50,9 +50,12 @@
 
 (def (function e) remove-variable-binding (name &optional (environment *environment*))
   (partial-eval.debug "Removing variable binding ~A" name)
+  (assert name)
   (remf (bindings-of environment) name))
 
 (def function extend-variable-bindings (name value &optional (environment *environment*))
+  (partial-eval.debug "Extending variable bindings ~A to ~A" name value)
+  (assert name)
   (push value (bindings-of environment))
   (push name (bindings-of environment)))
 
