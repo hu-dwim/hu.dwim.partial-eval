@@ -14,14 +14,15 @@
 
 (def layered-method eval-function-call? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
   (or (call-next-layered-method)
-      (member operator '(eq eql not null endp atom car cdr consp rest first second third fourth length getf char= stringp symbolp
+      (member operator '(eq eql not null endp atom car cdr caar cadr cdar cddr consp rest first second third fourth length member
+                         getf char= stringp symbolp
                          integerp zerop plusp minusp evenp oddp < <= = >= > - + * / 1+ 1-))))
 
 ;;;;;;
 ;;; has-function-call-side-effect?
 
 (def layered-method has-function-call-side-effect? :in standard-partial-eval-layer ((ast free-application-form) operator arguments)
-  (if (member operator '(cons list list*))
+  (if (member operator '(cons list list* member typep subtypep))
       :never
       (call-next-layered-method)))
 
@@ -174,6 +175,34 @@
                                              :arguments (cdr (arguments-of argument)))))
           (t (call-next-layered-method)))))
 
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'caar)) arguments)
+  (partial-eval-form (make-instance 'free-application-form
+                                    :operator 'car
+                                    :arguments (list (make-instance 'free-application-form
+                                                                    :operator 'car
+                                                                    :arguments arguments)))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cadr)) arguments)
+  (partial-eval-form (make-instance 'free-application-form
+                                    :operator 'car
+                                    :arguments (list (make-instance 'free-application-form
+                                                                    :operator 'cdr
+                                                                    :arguments arguments)))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cdar)) arguments)
+  (partial-eval-form (make-instance 'free-application-form
+                                    :operator 'cdr
+                                    :arguments (list (make-instance 'free-application-form
+                                                                    :operator 'car
+                                                                    :arguments arguments)))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'cddr)) arguments)
+  (partial-eval-form (make-instance 'free-application-form
+                                    :operator 'cdr
+                                    :arguments (list (make-instance 'free-application-form
+                                                                    :operator 'cdr
+                                                                    :arguments arguments)))))
+
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'list)) arguments)
   (if arguments
       (call-next-layered-method)
@@ -223,13 +252,13 @@
               (make-instance 'constant-form :value #t))
              (t (call-next-layered-method)))))
 
-(def function have-common-subclass? (class-1 class-2)
+(def function has-common-subclass? (class-1 class-2)
   (labels ((subclasses (class)
              (bind ((direct-subclasses (class-direct-subclasses class)))
                (append direct-subclasses
                        (mappend #'subclasses direct-subclasses)))))
-    (intersection (subclasses class-1)
-                  (subclasses class-2))))
+    (intersection (cons class-1 (subclasses class-1))
+                  (cons class-2 (subclasses class-2)))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'typep)) arguments)
   (bind ((value-argument (first arguments))
@@ -243,11 +272,18 @@
                (make-instance 'constant-form :value #f))
               ((and (find-class value-type nil)
                     (find-class (value-of type-argument) nil))
-               (if (have-common-subclass? (find-class value-type nil)
-                                          (find-class (value-of type-argument) nil))
+               (if (has-common-subclass? (find-class value-type nil)
+                                         (find-class (value-of type-argument) nil))
                    (call-next-layered-method)
                    (make-instance 'constant-form :value #f)))
               (t (call-next-layered-method)))
+        (call-next-layered-method))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'subtypep)) arguments)
+  (bind ((subtype-argument (first arguments)))
+    (if (and (typep subtype-argument 'constant-form)
+             (null (value-of subtype-argument)))
+        (make-instance 'constant-form :value #f)
         (call-next-layered-method))))
 
 (def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'class-of)) arguments)
@@ -270,3 +306,16 @@
               (partial-eval-form (make-instance 'free-application-form
                                                 :operator operator
                                                 :arguments reduced-arguments)))))))
+
+(def layered-method partial-eval-function-call :in standard-partial-eval-layer ((ast free-application-form) (operator (eql 'getf)) arguments)
+  (bind ((first-argument (first arguments))
+         (second-argument (second arguments)))
+    (when (and (typep first-argument 'free-application-form)
+               (eq 'list (operator-of first-argument))
+               (typep second-argument 'constant-form))
+      (doplist (key value (arguments-of first-argument))
+        (when (and (typep key 'constant-form)
+                   (eq (value-of key)
+                       (value-of second-argument)))
+          (return-from partial-eval-function-call value))))
+    (call-next-layered-method)))
