@@ -402,15 +402,13 @@
                                                   (typecase argument-definition
                                                     (function-argument-form-with-supplied-p-parameter (list (name-of argument-definition)
                                                                                                             (supplied-p-parameter-name-of argument-definition)))
-                                                    (allow-other-keys-function-argument-form
-                                                     nil)
                                                     (function-argument-form (list (name-of argument-definition)))))
                                                 argument-definitions)))
            ;; KLUDGE: TODO: remove this eval and use alexandria
            (evaluated-values (mapcar 'walk-form ; KLUDGE: TODO: this is stupid, in what environment are we walking?
                                      (eval `(destructuring-bind
                                                   ,@(cdadr (unwalk-form (make-instance 'lambda-function-form
-                                                                                       :arguments argument-definitions
+                                                                                       :bindings argument-definitions
                                                                                        :body nil)))
                                                 ,(list 'quote (mapcar 'unwalk-form (mapcar 'partial-eval-form argument-values)))
                                               (list ,@argument-names))))))
@@ -792,7 +790,7 @@
                                     (lambda-ast (walk-form form)))
                                (bind ((*print-level* 3))
                                  (partial-eval.debug "Inlining function call to ~A as ~A" operator form))
-                               (partial-eval-lambda-list (arguments-of lambda-ast) arguments)
+                               (partial-eval-lambda-list (bindings-of lambda-ast) arguments)
                                (partial-eval-implicit-progn lambda-ast))
                              (make-free-application-form operator arguments))
                        (give-up nil ast))
@@ -803,7 +801,7 @@
 
 (def layered-method partial-eval-form ((ast multiple-value-call-form))
   (bind ((arguments (mapcar #'partial-eval-form (arguments-of ast))))
-    (partial-eval-lambda-list (arguments-of (function-designator-of ast)) arguments)
+    (partial-eval-lambda-list (bindings-of (function-designator-of ast)) arguments)
     (partial-eval-form (function-designator-of ast))))
 
 (def layered-method partial-eval-form ((ast macrolet-form))
@@ -827,7 +825,7 @@
 
 (def layered-method partial-eval-form ((ast lambda-application-form))
   (bind ((*environment* (clone-environment))
-         (argument-definitions (arguments-of (operator-of ast)))
+         (argument-definitions (bindings-of (operator-of ast)))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
     (partial-eval.debug "Lambda function application ~A for arguments ~A with values ~A"
                         (operator-of ast) argument-definitions argument-values)
