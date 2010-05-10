@@ -818,8 +818,8 @@
   (bind ((*environment* (clone-environment))
          (lambda-ast (definition-of ast))
          (argument-values (mapcar #'partial-eval-form (arguments-of ast))))
-    (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A" (operator-of ast) (arguments-of lambda-ast) argument-values)
-    (partial-eval-lambda-list (arguments-of lambda-ast) argument-values)
+    (partial-eval.debug "Lexical function application ~A for arguments ~A with values ~A" (operator-of ast) (bindings-of lambda-ast) argument-values)
+    (partial-eval-lambda-list (bindings-of lambda-ast) argument-values)
     (aprog1 (partial-eval-implicit-progn lambda-ast)
       (partial-eval.debug "Result for lexical function application ~A is ~A" (operator-of ast) it))))
 
