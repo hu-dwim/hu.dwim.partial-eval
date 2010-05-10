@@ -11,6 +11,9 @@
 
 (def special-variable *definition-lambda-forms* (make-hash-table :synchronized #t))
 
+(def function clear-definition-lambda-forms ()
+  (clrhash *definition-lambda-forms*))
+
 (def function make-generic-method-lambda-form (method)
   (bind ((lambda-list (method-lambda-list method))
          (function-name (generic-function-name (method-generic-function method)))
