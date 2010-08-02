@@ -9,7 +9,7 @@
 ;;;;;;
 ;;; Project
 
-(def project :hu.dwim.partial-eval :path (system-pathname :hu.dwim.partial-eval))
+(def project :hu.dwim.partial-eval)
 
 (def method make-project-tab-pages ((component project/detail/inspector) (project (eql (find-project :hu.dwim.partial-eval))))
   (append (call-next-method)
