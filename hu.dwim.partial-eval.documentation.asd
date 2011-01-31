@@ -11,7 +11,7 @@
 (defsystem :hu.dwim.partial-eval.documentation
   :class hu.dwim.documentation-system
   :depends-on (:hu.dwim.partial-eval.test
-               :hu.dwim.wui)
+               :hu.dwim.presentation)
   :components ((:module "documentation"
                 :components ((:file "adventures" :depends-on ("package"))
                              (:file "install-guide" :depends-on ("package"))
