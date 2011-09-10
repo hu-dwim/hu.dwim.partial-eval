@@ -12,7 +12,7 @@
   :class hu.dwim.test-system
   :depends-on (:hu.dwim.partial-eval
                :hu.dwim.stefil+hu.dwim.def+swank
-               :hu.dwim.util.compact-class)
+               :hu.dwim.util.mop)
   :components ((:module "test"
                 :components ((:file "class" :depends-on ("suite"))
                              (:file "compact-class" :depends-on ("make-instance"))
