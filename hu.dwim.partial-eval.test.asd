@@ -12,7 +12,7 @@
                :hu.dwim.util/mop)
   :components ((:module "test"
                 :components ((:file "class" :depends-on ("suite"))
-                             (:file "compact-class" :depends-on ("make-instance"))
+                             ;; compact-class got bitrotten (:file "compact-class" :depends-on ("make-instance"))
                              (:file "function" :depends-on ("suite"))
                              (:file "generic-function" :depends-on ("suite"))
                              (:file "integer-power" :depends-on ("suite"))
