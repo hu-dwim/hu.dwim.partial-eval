@@ -118,7 +118,7 @@
     (make-function-lambda-form (fdefinition name)))
 
   (:method ((function function))
-    (bind (((:values nil nil function-name) (function-lambda-expression function))
+    (bind (((:values _ _ function-name) (function-lambda-expression function))
            (form (definition-source-form function)))
       (labels ((%make-function-lambda-form (form)
                  (cond ((and (eq 'defun (first form))
