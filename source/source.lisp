@@ -124,7 +124,7 @@
                  (cond ((and (eq 'defun (first form))
                              (equal function-name (second form)))
                         ;; TODO: use walker
-                        (bind (((:values body declarations nil) (parse-body (cdddr form) :documentation #t)))
+                        (bind (((:values body declarations _) (parse-body (cdddr form) :documentation #t)))
                           `(lambda ,(caddr form)
                              ,@declarations
                              (block ,function-name

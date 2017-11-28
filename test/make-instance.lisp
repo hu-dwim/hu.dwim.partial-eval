@@ -30,7 +30,8 @@
   (or (call-next-layered-method)
       (member operator
               '(make-instance allocate-instance initialize-instance shared-initialize
-                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance sb-pcl::get-instance-hash-code))))
+                ;; FIXME commented out sb-pcl::get-instance-hash-code because of bitrot
+                sb-int:list-of-length-at-least-p sb-pcl::allocate-standard-instance))))
 
 (def layered-method lookup-variable-value? :in make-instance/without-slots-layer ((ast special-variable-reference-form) (name (eql 'sb-pcl::**boot-state**)))
   #t)
